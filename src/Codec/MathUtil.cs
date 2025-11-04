@@ -1,0 +1,57 @@
+// Public Domain
+using System;
+
+namespace SVQNext.Codec
+{
+    public static class MathUtil
+    {
+        public static float Clamp01(float v) => Math.Max(0f, Math.Min(1f, v));
+        public static int Clamp01To255(float v) => (int)Math.Round(Math.Max(0, Math.Min(1, v))*255.0);
+
+        public static double PSNR(float[,,] A, float[,,] B)
+        {
+            int h=A.GetLength(0), w=A.GetLength(1);
+            double mse=0, n=h*w*3;
+            for (int y=0;y<h;y++) for (int x=0;x<w;x++)
+                for (int c=0;c<3;c++)
+                { double d=A[y,x,c]-B[y,x,c]; mse+=d*d; }
+            mse/=n; if (mse<=1e-12) return 99.0;
+            return 10.0*Math.Log10(1.0/mse);
+        }
+
+        public static double SSIM(float[,,] A, float[,,] B)
+        {
+            int h=A.GetLength(0), w=A.GetLength(1);
+            double C1=0.01*0.01, C2=0.03*0.03;
+            double sum=0;
+            for (int c=0;c<3;c++)
+            {
+                double muA=0, muB=0;
+                for (int y=0;y<h;y++) for (int x=0;x<w;x++){ muA+=A[y,x,c]; muB+=B[y,x,c]; }
+                muA/=h; muA/=w; muB/=h; muB/=w;
+                double varA=0, varB=0, cov=0;
+                for (int y=0;y<h;y++) for (int x=0;x<w;x++)
+                { double da=A[y,x,c]-muA, db=B[y,x,c]-muB; varA+=da*da; varB+=db*db; cov+=da*db; }
+                varA/=(h*w-1); varB/=(h*w-1); cov/=(h*w-1);
+                double num=(2*muA*muB+C1)*(2*cov+C2);
+                double den=(muA*muA+muB*muB+C1)*(varA+varB+C2);
+                sum+=num/den;
+            }
+            return sum/3.0;
+        }
+
+        public static void Hadamard2D(float[,] arr, int bs)
+        {
+            for (int y=0;y<bs;y++)
+                for (int s=1;s<bs;s<<=1)
+                    for (int i=0;i<bs;i+=s<<1)
+                        for (int j=0;j<s;j++)
+                        { float a=arr[y,i+j], b=arr[y,i+j+s]; arr[y,i+j]=a+b; arr[y,i+j+s]=a-b; }
+            for (int x=0;x<bs;x++)
+                for (int s=1;s<bs;s<<=1)
+                    for (int i=0;i<bs;i+=s<<1)
+                        for (int j=0;j<s;j++)
+                        { float a=arr[i+j,x], b=arr[i+j+s,x]; arr[i+j,x]=a+b; arr[i+j+s,x]=a-b; }
+        }
+    }
+}
