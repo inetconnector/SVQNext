@@ -12,6 +12,32 @@ It combines block-based vector quantization, motion-compensated prediction, rANS
 
 Unlike transform-based codecs (e.g., H.264/H.265/AV1), SVQNext avoids potentially encumbered DCT/DST or CABAC-derived designs. All core components derive from public academic methods (K-Means clustering, Hadamard, rANS), enabling a clean **public-domain** implementation.
 
+
+## MP4 vs. SVQ-Next — What’s the Difference?
+
+MP4 is not a codec, but a container format commonly used to store video encoded with H.264/AVC, H.265/HEVC, AV1, or other codecs. In everyday usage, “MP4” often refers to H.264 video, which is a widely used but patent‑encumbered video compression technology.
+
+SVQ-Next is a standalone video codec. It is designed to remain free of patented mechanisms and is based on vector quantization rather than DCT-based transforms.
+
+### Technical Comparison (High‑Level)
+
+| Criterion | MP4 (H.264/HEVC/AV1) | SVQ-Next |
+|-----------|-------------------------|--------------|
+| Core Concept | Transform coding (DCT) with quantization and entropy coding | Vector Quantization (codebook matching + residual) |
+| Prediction | Complex motion prediction (P/B frames, sub‑pixel refinement) | Simpler motion compensation; flexible design |
+| Artifacts | Blocking, ringing, banding | Pattern‑codebook artifacts; reduced DCT blocking |
+| Entropy Coding | CABAC/CAVLC (encumbered) | rANS (modern, unencumbered) |
+| Color Processing | YCbCr 4:2:0/4:2:2/4:4:4 | YCbCr 4:2:0 / 4:4:4 |
+| Error Robustness | Low fault tolerance; bit errors affect large regions | Optional forward error correction |
+| Licensing | Patent‑encumbered; royalties required for H.264/HEVC | Public Domain; no royalties |
+| Hardware Support | Widely supported in GPUs, SoCs, encoders, decoders | Currently software‑only |
+| Typical Use Cases | Streaming, consumer video, broadcast | Research, resilient streaming, ML pipelines, open platforms |
+
+### Key Technical Difference Summary
+
+H.264/HEVC rely on DCT to convert image data into frequency components, which is efficient but results in recognizable transform‑based artifacts. SVQ-Next instead encodes image blocks by mapping them to entries in a vector codebook and storing only the index and a small residual. This avoids typical DCT artifacts and aligns structurally with machine‑learning‑style pattern representation.
+
+
 ## Features
 
 - Vector-quantization-based compression with block-based residual coding
