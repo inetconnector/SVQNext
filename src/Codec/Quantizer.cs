@@ -16,7 +16,7 @@ namespace SVQNext.Codec
         public static float[] DEQ_DC(short[] q)
         { var f=new float[q.Length]; for (int i=0;i<q.Length;i++) f[i]=q[i]/(float)DC_SCALE; return f; }
 
-        public static double Lambda(float energy, string quality)
+        public static double Lambda(double energy, string quality)
         {
             double baseL = quality=="ultra" ? 0.015 : quality=="fast" ? 0.03 : 0.02;
             return baseL * (1.0 + 0.25*energy);

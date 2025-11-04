@@ -7,6 +7,7 @@ using SixLabors.ImageSharp.Processing;
 using System.IO;
 using System.Linq;
 using SVQNext.Codec;
+using CodecPipeline = SVQNext.Codec.Pipeline;
 using SVQNext.Tools;
 
 namespace SVQNext
@@ -67,7 +68,7 @@ namespace SVQNext
             {
                 Console.WriteLine($"[SVQ5] Decoding container {INPUT} ...");
                 var mux = Container.Read(INPUT);
-                var (rgb, t, h, w) = Pipeline.DecodeFromMux(mux);
+                var (rgb, t, h, w) = CodecPipeline.DecodeFromMux(mux);
                 var recBmps = rgb.Select(f => ImageIO.ToBitmap(f)).ToList();
                 // Persist a visual sanity check so that decoding can be verified quickly.
                 ImageIO.SaveGif(recBmps, Path.Combine(OUTDIR, "reconstructed_from_file.gif"));
@@ -82,7 +83,7 @@ namespace SVQNext
                 var rgb = frames.Select(f => ImageIO.ToFloatRgb(f)).ToArray();
                 Console.WriteLine("[SVQ5] Encoding video...");
                 // Encode using the high-performance pipeline; the settings map directly to codec knobs.
-                var mux = Pipeline.EncodeToMux(rgb, QUALITY, SEARCHMODE, BS, SEARCH, QMotion, GOP, USE_BFRAMES, LOOP_FILTERS, USE_HDR, BITDEPTH, COLOR, ENABLE_SCALABLE, TARGET_KBPS);
+                var mux = CodecPipeline.EncodeToMux(rgb, QUALITY, SEARCHMODE, BS, SEARCH, QMotion, GOP, USE_BFRAMES, LOOP_FILTERS, USE_HDR, BITDEPTH, COLOR, ENABLE_SCALABLE, TARGET_KBPS);
                 if (DEMO_AUDIO) mux = Audio.AttachDemoAudio(mux, sampleRate: 16000);
                 if (DEMO_SUBS) mux = Subtitles.AttachDemoSubs(mux);
 
