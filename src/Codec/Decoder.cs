@@ -14,12 +14,13 @@ public static class Decoder
             var pred = t == 0 ? new float[f.Shape.Hc, f.Shape.Wc] : outY[t - 1];
             int gh = f.Shape.Hc / bs, gw = f.Shape.Wc / bs;
             var resBlocks = new float[gh * gw, bs * bs];
+            var dc = Quantizer.DEQ_DC(f.DCq);
             for (var n = 0; n < gh * gw; n++)
             {
                 int k = f.Idx[n];
-                var meanK = mu[k];
+                var blockBase = dc[n];
                 for (var j = 0; j < bs * bs; j++)
-                    resBlocks[n, j] = codebook[k, j] + meanK + f.DCq[n] / (float)Quantizer.DC_SCALE;
+                    resBlocks[n, j] = codebook[k, j] + blockBase;
             }
 
             var flat = new float[f.Shape.Hc * f.Shape.Wc];
