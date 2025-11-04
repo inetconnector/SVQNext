@@ -23,9 +23,29 @@ namespace SVQNext.Tools
             for (int i=255;i<512;i++) EXP[i]=EXP[i-255];
             LOG[0]=0;
         }
-        static byte gf_mul(byte a, byte b){ if (a==0 || b==0) return 0; int r=LOG[a]+LOG[b]; return EXP[r]; }
-        static byte gf_div(byte a, byte b){ if (a==0) return 0; if (b==0) throw new DivideByZeroException(); int r=LOG[a]-LOG[b]; if (r<0) r+=255; return EXP[r]; }
-        static byte gf_pow(byte a, int p){ int r=(LOG[a]*p)%255; if (r<0) r+=255; return EXP[r]; }
+        static byte gf_mul(byte a, byte b)
+        {
+            if (a==0 || b==0) return 0;
+            int r = LOG[a] + LOG[b];
+            return EXP[r];
+        }
+
+        static byte gf_div(byte a, byte b)
+        {
+            if (a==0) return 0;
+            if (b==0) throw new DivideByZeroException();
+            int r = LOG[a] - LOG[b];
+            if (r<0) r+=255;
+            return EXP[r];
+        }
+
+        static byte gf_pow(byte a, int p)
+        {
+            if (a==0) return 0;
+            int r = (LOG[a]*p)%255;
+            if (r<0) r+=255;
+            return EXP[r];
+        }
 
         // Generate generator polynomial for t parity symbols
         static byte[] Generator(int t)
@@ -113,28 +133,63 @@ namespace SVQNext.Tools
                 b[i]=synd[i];
             }
             // Gaussian elimination in GF(256)
-            for (int col=0, row=0; col<m && row<m; col++, row++) {
-                int pivot=row
-                for (int r=row;r<m;r++) {
-                    if (M[r,col]!=0){ pivot=r; break; }
-                if (M[pivot,col]==0) { continue; }
-                if (pivot!=row) {
-                    for (int c=col;c<m;c++) { 
-                        byte tmp=M[row,c]; M[row,c]=M[pivot,c]; M[pivot,c]=tmp
-                    byte tb=b[row]; b[row]=b[pivot]; b[pivot]=tb; }
+            int row=0;
+            for (int col=0; col<m && row<m; col++)
+            {
+                int pivot=row;
+                for (int r=row;r<m;r++)
+                {
+                    if (M[r,col]!=0)
+                    {
+                        pivot=r;
+                        break;
+                    }
+                }
+                if (M[pivot,col]==0)
+                {
+                    continue;
+                }
+                if (pivot!=row)
+                {
+                    for (int c=col;c<m;c++)
+                    {
+                        byte tmp=M[row,c];
+                        M[row,c]=M[pivot,c];
+                        M[pivot,c]=tmp;
+                    }
+                    byte tb=b[row];
+                    b[row]=b[pivot];
+                    b[pivot]=tb;
+                }
                 byte inv = gf_div(1, M[row,col]);
-                for (int c=col;c<m;c++) { M[row,c]=gf_mul(M[row,c], inv)
+                for (int c=col;c<m;c++)
+                {
+                    M[row,c]=gf_mul(M[row,c], inv);
+                }
                 b[row]=gf_mul(b[row], inv);
-                for (int r=0;r<m;r++) {
-                    if (r==row) { continue; }
+                for (int r=0;r<m;r++)
+                {
+                    if (r==row)
+                    {
+                        continue;
+                    }
                     byte factor=M[r,col];
-                    if (factor==0) { continue; }
-                    for (int c=col;c<m;c++) { M[r,c] ^= gf_mul(factor, M[row,c])
-                    b[r] ^= gf_mul(factor, b[row]); }
+                    if (factor==0)
+                    {
+                        continue;
+                    }
+                    for (int c=col;c<m;c++)
+                    {
+                        M[r,c] ^= gf_mul(factor, M[row,c]);
+                    }
+                    b[r] ^= gf_mul(factor, b[row]);
+                }
+                row++;
+            }
             // Now M should be identity; b are the unknown erased symbols
             var res=(byte[])codeword.Clone();
             for (int e=0;e<m;e++) res[erasures[e]]=b[e];
-            return res; }
+            return res;
         }
     }
 }
