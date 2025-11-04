@@ -11,8 +11,13 @@ using SVQNext.Tools;
 
 namespace SVQNext
 {
+    /// <summary>
+    /// Entry point that wires the encoder, decoder and demo utilities together.
+    /// A single binary can generate sample content, mux it to disk or decode existing streams.
+    /// </summary>
     public class Program
     {
+        // CLI defaults tuned for a responsive demo encode that still stresses the pipeline.
         static string OUTDIR = "out";
         static bool DO_DECODE = false, DO_ENCODE = false;
         static string INPUT = "";
@@ -24,6 +29,9 @@ namespace SVQNext
         static bool ENABLE_SCALABLE=true;
         static int TARGET_KBPS=1500; // simple RC target
 
+        /// <summary>
+        /// Parses arguments, then either decodes an existing container or produces demo content.
+        /// </summary>
         public static void Main(string[] args)
         {
             for (int i=0;i<args.Length;i++)
@@ -61,6 +69,7 @@ namespace SVQNext
                 var mux = Container.Read(INPUT);
                 var (rgb, t, h, w) = Pipeline.DecodeFromMux(mux);
                 var recBmps = rgb.Select(f => ImageIO.ToBitmap(f)).ToList();
+                // Persist a visual sanity check so that decoding can be verified quickly.
                 ImageIO.SaveGif(recBmps, Path.Combine(OUTDIR, "reconstructed_from_file.gif"));
                 Console.WriteLine("Done.");
                 return;
@@ -72,6 +81,7 @@ namespace SVQNext
                 var frames = ImageIO.GenerateDemo(T,H,W);
                 var rgb = frames.Select(f => ImageIO.ToFloatRgb(f)).ToArray();
                 Console.WriteLine("[SVQ5] Encoding video...");
+                // Encode using the high-performance pipeline; the settings map directly to codec knobs.
                 var mux = Pipeline.EncodeToMux(rgb, QUALITY, SEARCHMODE, BS, SEARCH, QMotion, GOP, USE_BFRAMES, LOOP_FILTERS, USE_HDR, BITDEPTH, COLOR, ENABLE_SCALABLE, TARGET_KBPS);
                 if (DEMO_AUDIO) mux = Audio.AttachDemoAudio(mux, sampleRate: 16000);
                 if (DEMO_SUBS) mux = Subtitles.AttachDemoSubs(mux);
@@ -81,6 +91,7 @@ namespace SVQNext
                 Console.WriteLine($"Container written: {pack}");
 
                 // Segmentation & manifest
+                // Segmenting after the encode keeps latency low for streaming scenarios.
                 Console.WriteLine("[SVQ5] Writing streaming segments...");
                 Segmenter.WriteSegments(OUTDIR, mux, 24); // ~1s chunks @24fps
                 Console.WriteLine("Done. See manifest.json + seg_*.svqs");
