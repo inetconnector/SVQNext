@@ -1,16 +1,16 @@
-# SVQNext — Scalable Vector Quantization Video Codec (Public Domain)
+# SVQNext — Scalable Vector Quantization Video Codec (AGPLv3)
 
 **SVQNext** is a high-performance experimental video codec based on predictive **Scalable Vector Quantization**.  
 The name **SVQNext** stands for **Scalable Vector Quantization – Next Generation**, describing the core approach of a scalable, VQ-based next-generation video compression pipeline.
 
-SVQNext aims to provide HEVC-class compression while remaining fully **public domain**, **patent-neutral**, transparent and suitable for research, education and practical use.
+SVQNext aims to provide HEVC-class compression while remaining fully **free software** under the **GNU AGPLv3**, **patent-neutral**, transparent and suitable for research, education and practical use.
 
 ## Overview
 
 SVQNext is a cross-platform video codec written in C#/.NET 8.  
 It combines block-based vector quantization, motion-compensated prediction, rANS entropy coding, adaptive filtering, HDR support and optional forward-error-correction hooks for resilient streaming.
 
-Unlike transform-based codecs (e.g., H.264/H.265/AV1), SVQNext avoids potentially encumbered DCT/DST or CABAC-derived designs. All core components derive from public academic methods (K-Means clustering, Hadamard, rANS), enabling a clean **public-domain** implementation.
+Unlike transform-based codecs (e.g., H.264/H.265/AV1), SVQNext avoids potentially encumbered DCT/DST or CABAC-derived designs. All core components derive from public academic methods (K-Means clustering, Hadamard, rANS), enabling a clean **free-software** implementation.
 
 
 ## MP4 vs. SVQ-Next — What’s the Difference?
@@ -29,7 +29,7 @@ SVQ-Next is a standalone video codec. It is designed to remain free of patented 
 | Entropy Coding | CABAC/CAVLC (encumbered) | rANS (modern, unencumbered) |
 | Color Processing | YCbCr 4:2:0/4:2:2/4:4:4 | YCbCr 4:2:0 / 4:4:4 |
 | Error Robustness | Low fault tolerance; bit errors affect large regions | Optional forward error correction |
-| Licensing | Patent‑encumbered; royalties required for H.264/HEVC | Public Domain; no royalties |
+| Licensing | Patent‑encumbered; royalties required for H.264/HEVC | GNU AGPLv3; no royalties |
 | Hardware Support | Widely supported in GPUs, SoCs, encoders, decoders | Currently software‑only |
 | Typical Use Cases | Streaming, consumer video, broadcast | Research, resilient streaming, ML pipelines, open platforms |
 
@@ -110,7 +110,7 @@ Optimized/  SIMD-friendly kernels used by the codec core
 
 | Category | HEVC/H.265 | SVQNext |
 |:--|:--|:--|
-| Licensing | Patented, royalties | Public domain (CC0) |
+| Licensing | Patented, royalties | GNU AGPLv3 |
 | Compression | Excellent | ≈ HEVC-class |
 | Encoding Speed | Slow | Fast CPU encode |
 | Decoding Speed | Medium | 3–5× faster |
@@ -118,8 +118,8 @@ Optimized/  SIMD-friendly kernels used by the codec core
 
 ## License and Legal
 
-Released into the **Public Domain** under **CC0 1.0** and **The Unlicense**.  
-Includes a defensive publication to prevent future patent claims.  
+Distributed under the terms of the **GNU Affero General Public License v3.0**. See the `LICENSE` file for details.
+Includes a defensive publication to prevent future patent claims.
 No third-party code is included (see `THIRD_PARTY_DISCLOSURE.txt` for verification).
 
 ## Kurzüberblick (Deutsch)
@@ -129,5 +129,5 @@ Er nutzt bewegungskompensierte Prädiktion, rANS-Kodierung, B-Frames, HDR-Suppor
 
 ---
 
-Project Home: https://github.com/inetconnector/SVQNext  
-Author: Public Domain Contributors (you own your copy)
+Project Home: https://github.com/inetconnector/SVQNext
+Author: SVQNext Contributors (licensed under AGPLv3)

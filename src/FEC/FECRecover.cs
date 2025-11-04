@@ -1,5 +1,4 @@
-
-// Public Domain
+// SPDX-License-Identifier: AGPL-3.0-or-later
 using SVQNext.Codec;
 
 namespace SVQNext.Tools
