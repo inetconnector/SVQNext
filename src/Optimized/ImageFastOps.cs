@@ -1,39 +1,32 @@
-
-using System;
-using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 
-namespace SVQNext.Optimized
+namespace SVQNext.Optimized;
+
+public static class ImageFastOps
 {
-    public static class ImageFastOps
+    public delegate void RowAction(Span<Rgba32> row);
+
+    public static void ApplySpan(RowAction rowAction, Bitmap img)
     {
-        public delegate void RowAction(Span<Rgba32> row);
-
-        public static void ApplySpan(RowAction rowAction, Image<Rgba32> img)
+        img.ProcessPixelRows(accessor =>
         {
-            img.ProcessPixelRows(accessor =>
+            for (var y = 0; y < accessor.Height; y++)
             {
-                for (int y = 0; y < accessor.Height; y++)
-                {
-                    Span<Rgba32> row = accessor.GetRowSpan(y);
-                    rowAction(row);
-                }
-            });
-        }
+                var row = accessor.GetRowSpan(y);
+                rowAction(row);
+            }
+        });
+    }
 
-        public static void MapRows(Image<Rgba32> img, Func<Rgba32, Rgba32> f)
+    public static void MapRows(Bitmap img, Func<Rgba32, Rgba32> f)
+    {
+        img.ProcessPixelRows(accessor =>
         {
-            img.ProcessPixelRows(accessor =>
+            for (var y = 0; y < accessor.Height; y++)
             {
-                for (int y = 0; y < accessor.Height; y++)
-                {
-                    var row = accessor.GetRowSpan(y);
-                    for (int x = 0; x < row.Length; x++)
-                    {
-                        row[x] = f(row[x]);
-                    }
-                }
-            });
-        }
+                var row = accessor.GetRowSpan(y);
+                for (var x = 0; x < row.Length; x++) row[x] = f(row[x]);
+            }
+        });
     }
 }

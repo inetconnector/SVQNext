@@ -1,46 +1,56 @@
 // Public Domain
-using System;
-using System.Collections.Generic;
+
 using SVQNext.Codec;
 
-namespace SVQNext.Tools
+namespace SVQNext.Tools;
+
+public static class Audio
 {
-    public static class Audio
+    // Simple PD ADPCM (4-bit) demo encoder/decoder to showcase audio track
+    public static Mux AttachDemoAudio(Mux mux, int sampleRate = 16000, int seconds = 5)
     {
-        // Simple PD ADPCM (4-bit) demo encoder/decoder to showcase audio track
-        public static Mux AttachDemoAudio(Mux mux, int sampleRate=16000, int seconds=5)
+        var n = sampleRate * seconds;
+        var pcm = new short[n];
+        for (var i = 0; i < n; i++)
         {
-            int n=sampleRate*seconds;
-            var pcm=new short[n];
-            for (int i=0;i<n;i++)
-            {
-                double t=i/(double)sampleRate;
-                double s=Math.Sin(2*Math.PI*440*t)*0.5 + Math.Sin(2*Math.PI*660*t)*0.25;
-                pcm[i]=(short)Math.Round(s*32767);
-            }
-            var cod=AdpcmEncode(pcm);
-            var tr=new Track("audio", new Dictionary<string,string>{{"sr",sampleRate.ToString()},{"codec","adpcm4"}}, new List<Chunk>{ new Chunk(cod, Codec.CRC32.Compute(cod)) });
-            var list=new List<Track>(mux.Tracks); list.Add(tr);
-            return new Mux(list);
+            var t = i / (double)sampleRate;
+            var s = Math.Sin(2 * Math.PI * 440 * t) * 0.5 + Math.Sin(2 * Math.PI * 660 * t) * 0.25;
+            pcm[i] = (short)Math.Round(s * 32767);
         }
 
-        public static byte[] AdpcmEncode(short[] pcm)
+        var cod = AdpcmEncode(pcm);
+        var tr = new Track("audio",
+            new Dictionary<string, string> { { "sr", sampleRate.ToString() }, { "codec", "adpcm4" } },
+            new List<Chunk> { new(cod, CRC32.Compute(cod)) });
+        var list = new List<Track>(mux.Tracks);
+        list.Add(tr);
+        return new Mux(list);
+    }
+
+    public static byte[] AdpcmEncode(short[] pcm)
+    {
+        var idx = 0;
+        var step = 7; // simple
+        var outb = new List<byte>();
+        for (var i = 0; i < pcm.Length; i += 2)
         {
-            int idx=0; int step=7; // simple
-            var outb=new List<byte>();
-            for (int i=0;i<pcm.Length;i+=2)
+            byte b = 0;
+            for (var k = 0; k < 2; k++)
             {
-                byte b=0;
-                for (int k=0;k<2;k++)
+                if (i + k >= pcm.Length)
                 {
-                    if (i+k>=pcm.Length){ b<<=4; continue; }
-                    short s=pcm[i+k];
-                    int code = (s>>12)&0xF;
-                    b = (byte)((b<<4) | code);
+                    b <<= 4;
+                    continue;
                 }
-                outb.Add(b);
+
+                var s = pcm[i + k];
+                var code = (s >> 12) & 0xF;
+                b = (byte)((b << 4) | code);
             }
-            return outb.ToArray();
+
+            outb.Add(b);
         }
+
+        return outb.ToArray();
     }
 }
