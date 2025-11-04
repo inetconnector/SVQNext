@@ -34,6 +34,8 @@ public static class Encoder
         Dictionary<int, int> hist, int bs, string quality)
     {
         int Hc = curr.GetLength(0) / bs * bs, Wc = curr.GetLength(1) / bs * bs, gh = Hc / bs, gw = Wc / bs;
+        curr = Transform.AlignToBlock(curr, bs);
+        pred = Transform.AlignToBlock(pred, bs);
         var res = Transform.Sub(curr, pred);
         var blocks = VQ.Extract(res, bs, out _);
         var centered = Center(blocks, bs, out var dc);
