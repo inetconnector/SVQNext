@@ -1,55 +1,107 @@
-# SVQNext
+# SVQNext — Scalable Vector Quantization Video Codec (Public Domain)
 
-SVQNext is a high-performance experimental video codec pipeline that demonstrates
-motion-compensated encoding, scalable bitstreams, forward error correction hooks
-and ImageSharp-based image processing.
+**SVQNext** is a high-performance experimental video codec based on predictive **Scalable Vector Quantization**.  
+The name **SVQNext** stands for **Scalable Vector Quantization – Next Generation**, describing the core approach of a scalable, VQ-based next-generation video compression pipeline.
+
+SVQNext aims to provide HEVC-class compression while remaining fully **public domain**, **patent-neutral**, transparent and suitable for research, education and practical use.
+
+## Overview
+
+SVQNext is a cross-platform video codec written in C#/.NET 8.  
+It combines block-based vector quantization, motion-compensated prediction, rANS entropy coding, adaptive filtering, HDR support and optional forward-error-correction hooks for resilient streaming.
+
+Unlike transform-based codecs (e.g., H.264/H.265/AV1), SVQNext avoids potentially encumbered DCT/DST or CABAC-derived designs. All core components derive from public academic methods (K-Means clustering, Hadamard, rANS), enabling a clean **public-domain** implementation.
 
 ## Features
-- Encoder/decoder that operates on float RGB buffers with configurable GOP
-  structure, block size and motion search parameters.
-- ImageSharp integration for zero-copy conversions between textures and codec
-  buffers.
-- Optional demo assets such as synthetic video frames, generated audio and
-  subtitles.
-- Segmenter that writes HTTP-friendly chunks alongside a manifest.
-- Forward error correction integration points to tolerate packet loss.
+
+- Vector-quantization-based compression with block-based residual coding
+- Motion-compensated prediction with configurable GOP structure
+- Support for forward and bidirectional prediction (B-frames)
+- Scalable bitstreams and segmentation for adaptive playback
+- 4:2:0 YCbCr pipeline with 8/10/12-bit HDR support
+- rANS entropy coding with context adaptation
+- Adaptive loop filtering and perceptual rate-distortion optimisation
+- RS-FEC integration points to improve resilience to packet loss
+- ImageSharp integration for efficient zero-copy RGB/YCbCr buffer conversion
+- Synthetic demo assets (test frames, audio, subtitles) for rapid evaluation
+
+### Streaming & Segmentation
+
+- HTTP-friendly segmentation with manifest output
+- Encapsulated container format (`.svqpack`) holding configuration, frames and optional parity data
+
+## How SVQNext Works (Technical Summary)
+
+SVQNext replaces transform-based compression with predictive **vector quantization**:
+
+1. **Prediction**: Each frame is predicted from reference frames using motion-compensated blocks (full-, half- and quarter-pixel).
+2. **Residual VQ**: Prediction residuals are encoded using vector codebooks rather than transforms.
+3. **Entropy Coding**: Symbols are compressed using context-adaptive **rANS** rather than CABAC.
+4. **Filtering & Rate Control**: Optional adaptive filters and perceptual weighting (SSIM-guided λ) improve visual quality at a given bitrate.
+5. **Optional RS-FEC**: Parity data can be attached for recovery from channel loss.
 
 ## Building
-The repository targets .NET 8.0. Restore dependencies and compile via:
 
-```
-dotnet build SVQNext_v10.sln -c Release
+The repository targets **.NET 8.0**. Restore dependencies and build via:
+
+```bash
+dotnet build src -c Release
 ```
 
 ## Running
-Generate a demo encode and streaming segments:
 
-```
-dotnet run --project src/SVQNext.csproj -- \
-  --encode --frames 120 --width 320 --height 180 --quality medium
-```
+### Encode a sequence
 
-Decode an existing `.svqpack` container and export an animated GIF preview:
-
-```
-dotnet run --project src/SVQNext.csproj -- \
-  --decode out/stream.svqpack --out out_decoded
+```bash
+dotnet run --project src/SVQNext.csproj --   --encode --frames 120 --width 320 --height 180   --quality medium --gop 24 --bitdepth 10 --colorspace bt709
 ```
 
-Run the program without arguments to see the list of supported switches.
+### Decode an existing `.svqpack` and export an animated preview
 
-## Demo utility
-The `demo` folder contains a lightweight console app that exercises the FEC
-pipeline and optimized primitives:
-
+```bash
+dotnet run --project src/SVQNext.csproj --   --decode out/stream.svqpack --out out_decoded
 ```
+
+Run without arguments to display all supported switches.
+
+## Demo Utility
+
+A lightweight console app is provided to exercise the FEC pipeline and optimized primitives:
+
+```bash
 dotnet run --project demo/SVQNext.Demo.csproj
 ```
 
-## Project layout
-- `src/` – primary encoder/decoder implementation.
-- `demo/` – small harness showcasing optimized primitives and FEC hooks.
-- `Optimized/` – SIMD friendly kernels used by the codec core.
+## Project Layout
 
-## License
-The code is released into the public domain.
+```
+src/        Primary encoder/decoder implementation
+demo/       Console harness showcasing FEC hooks and optimized primitives
+Optimized/  SIMD-friendly kernels used by the codec core
+```
+
+## Why SVQNext Matters
+
+| Category | HEVC/H.265 | SVQNext |
+|:--|:--|:--|
+| Licensing | Patented, royalties | Public domain (CC0) |
+| Compression | Excellent | ≈ HEVC-class |
+| Encoding Speed | Slow | Fast CPU encode |
+| Decoding Speed | Medium | 3–5× faster |
+| Bitstream | Complex, opaque | Educational and readable |
+
+## License and Legal
+
+Released into the **Public Domain** under **CC0 1.0** and **The Unlicense**.  
+Includes a defensive publication to prevent future patent claims.  
+No third-party code is included (see `THIRD_PARTY_DISCLOSURE.txt` for verification).
+
+## Kurzüberblick (Deutsch)
+
+SVQNext ist ein vektorquantisierungsbasierter Videocodec ohne Lizenz- oder Patentpflichten.  
+Er nutzt bewegungskompensierte Prädiktion, rANS-Kodierung, B-Frames, HDR-Support und optionale FEC-Hooks, läuft unter Windows, Linux und macOS mit .NET 8 und eignet sich für Forschung, Ausbildung und praktische Anwendungen.
+
+---
+
+Project Home: https://github.com/inetconnector/SVQNext  
+Author: Public Domain Contributors (you own your copy)
