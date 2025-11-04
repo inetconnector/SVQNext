@@ -7,7 +7,9 @@ namespace SVQNext.Optimized
 {
     public static class ImageFastOps
     {
-        public static void ApplySpan(Action<Span<Rgba32>> rowAction, Image<Rgba32> img)
+        public delegate void RowAction(Span<Rgba32> row);
+
+        public static void ApplySpan(RowAction rowAction, Image<Rgba32> img)
         {
             img.ProcessPixelRows(accessor =>
             {
