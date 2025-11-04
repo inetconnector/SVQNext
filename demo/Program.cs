@@ -1,6 +1,7 @@
 using SVQNext.Codec;
 using SVQNext.Tools;
 using CodecPipeline = SVQNext.Codec.Pipeline;
+using Bitmap = SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>;
 
 const int frameCount = 96;
 const int width = 320;
