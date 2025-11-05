@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+using System;
+using System.Collections.Generic;
+using System.IO;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Advanced;
+using SixLabors.ImageSharp.Formats.Gif;
 using SixLabors.ImageSharp.PixelFormats;
 using SVQNext.Compat;
 
@@ -70,7 +74,55 @@ public static class ImageIO
         if (frames.Count == 0)
             throw new ArgumentException("At least one frame is required to encode a GIF.", nameof(frames));
 
-        using var gif = frames[0].Clone();
+        var expected = new List<Rgba32[]>(frames.Count);
+        for (var i = 0; i < frames.Count; i++) expected.Add(CapturePixels(frames[i]));
+
+        const int compressionFactor = 4;
+        const int maxChannelError = 2;
+        const double maxMeanSquaredError = 0.75;
+
+        var attempts = new GifEncoder?[]
+        {
+            null,
+            new GifEncoder { ColorTableMode = GifColorTableMode.Local },
+            new GifEncoder { ColorTableMode = GifColorTableMode.Global }
+        };
+
+        foreach (var encoder in attempts)
+            if (TryEncodeGif(
+                    frames,
+                    path,
+                    expected,
+                    encoder,
+                    compressionFactor,
+                    maxChannelError,
+                    maxMeanSquaredError
+                ))
+                return;
+
+        throw new InvalidOperationException("Failed to encode GIF near-losslessly with sufficient compression.");
+    }
+
+    private static bool TryEncodeGif(IReadOnlyList<Bitmap> frames, string path, IReadOnlyList<Rgba32[]> expected,
+        GifEncoder? encoder, int compressionFactor, int maxChannelError, double maxMeanSquaredError)
+    {
+        using var gif = BuildGif(frames);
+        ConfigureGifMetadata(gif);
+
+        if (encoder == null)
+            gif.SaveAsGif(path);
+        else
+            gif.Save(path, encoder);
+
+        var encodedBytes = new FileInfo(path).Length;
+
+        return GifNearLossless(path, expected, gif.Width, gif.Height, maxChannelError, maxMeanSquaredError) &&
+               EncodedIsSignificantlySmaller(encodedBytes, frames.Count, gif.Width, gif.Height, compressionFactor);
+    }
+
+    private static Image<Rgba32> BuildGif(IReadOnlyList<Bitmap> frames)
+    {
+        var gif = frames[0].Clone();
 
         for (var i = 1; i < frames.Count; i++)
         {
@@ -78,11 +130,75 @@ public static class ImageIO
             gif.Frames.AddFrame(clone.Frames.RootFrame);
         }
 
-        // Configure playback for 24 fps (≈4 hundredths of a second per frame).
-        foreach (var frame in gif.Frames) frame.Metadata.GetGifMetadata().FrameDelay = 4;
+        return gif;
+    }
+
+    private static void ConfigureGifMetadata(Image<Rgba32> gif)
+    {
+        foreach (var frame in gif.Frames)
+        {
+            var meta = frame.Metadata.GetGifMetadata();
+            meta.FrameDelay = 4;
+        }
 
         gif.Metadata.GetGifMetadata().RepeatCount = 0;
-        gif.SaveAsGif(path);
+    }
+
+    private static Rgba32[] CapturePixels(Bitmap frame)
+    {
+        var pixels = new Rgba32[frame.Width * frame.Height];
+        frame.CopyPixelDataTo(pixels);
+        return pixels;
+    }
+
+    private static bool GifNearLossless(string path, IReadOnlyList<Rgba32[]> expected, int width, int height,
+        int maxChannelError, double maxMeanSquaredError)
+    {
+        using var image = Image.Load<Rgba32>(path);
+        if (image.Frames.Count != expected.Count) return false;
+
+        var totalSquaredError = 0d;
+        var totalSamples = 0L;
+        var maxObservedError = 0;
+
+        for (var i = 0; i < expected.Count; i++)
+        {
+            var frame = image.Frames[i];
+            if (frame.Width != width || frame.Height != height) return false;
+
+            var pixels = new Rgba32[width * height];
+            frame.CopyPixelDataTo(pixels);
+            var reference = expected[i];
+
+            for (var p = 0; p < pixels.Length; p++)
+            {
+                var decoded = pixels[p];
+                var source = reference[p];
+
+                var dr = Math.Abs(decoded.R - source.R);
+                var dg = Math.Abs(decoded.G - source.G);
+                var db = Math.Abs(decoded.B - source.B);
+
+                maxObservedError = Math.Max(maxObservedError, Math.Max(dr, Math.Max(dg, db)));
+
+                totalSquaredError += dr * dr + dg * dg + db * db;
+                totalSamples += 3;
+            }
+        }
+
+        var meanSquaredError = totalSamples == 0 ? 0 : totalSquaredError / totalSamples;
+        return maxObservedError <= maxChannelError && meanSquaredError <= maxMeanSquaredError;
+    }
+
+    private static bool EncodedIsSignificantlySmaller(long encodedBytes, int frameCount, int width, int height,
+        int compressionFactor)
+    {
+        if (frameCount == 0) return false;
+
+        var encodedPerFrame = (double)encodedBytes / frameCount;
+        var decodedPerFrame = width * height * 4.0;
+
+        return encodedPerFrame * compressionFactor <= decodedPerFrame;
     }
 
     /// <summary>
