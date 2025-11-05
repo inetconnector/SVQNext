@@ -9,7 +9,9 @@ public static class Encoder
     {
         var T = Y.Length;
         var frames = new EncodedFrame[T];
-        (int Hc, int Wc) shape = (Y[0].GetLength(0) / bs * bs, Y[0].GetLength(1) / bs * bs);
+        for (var i = 0; i < T; i++)
+            Y[i] = Transform.AlignToBlock(Y[i], bs);
+        (int Hc, int Wc) shape = (Y[0].GetLength(0), Y[0].GetLength(1));
         var hist = new Dictionary<int, int>();
 
         // I-frame 0

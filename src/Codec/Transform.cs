@@ -28,23 +28,33 @@ public static class Transform
 
     public static float[,] AlignToBlock(float[,] src, int bs)
     {
+        if (src == null) throw new ArgumentNullException(nameof(src));
+        if (bs <= 0) throw new ArgumentOutOfRangeException(nameof(bs));
+
         int h = src.GetLength(0);
         int w = src.GetLength(1);
 
-        int newH = (h / bs) * bs;
-        int newW = (w / bs) * bs;
+        int newH = ((h + bs - 1) / bs) * bs;
+        int newW = ((w + bs - 1) / bs) * bs;
 
-        // Already aligned?
         if (newH == h && newW == w)
             return src;
 
-        var r = new float[newH, newW];
+        var padded = new float[newH, newW];
+        var lastY = Math.Max(0, h - 1);
+        var lastX = Math.Max(0, w - 1);
 
-        for (int y = 0; y < newH; y++)
-        for (int x = 0; x < newW; x++)
-            r[y, x] = src[y, x];
+        for (var y = 0; y < newH; y++)
+        {
+            var sy = y < h ? y : lastY;
+            for (var x = 0; x < newW; x++)
+            {
+                var sx = x < w ? x : lastX;
+                padded[y, x] = src[sy, sx];
+            }
+        }
 
-        return r;
+        return padded;
     }
 
 }
