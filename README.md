@@ -1,9 +1,11 @@
 # SVQNext — Scalable Vector Quantization Video Codec (AGPLv3)
 
-**SVQNext** is a high-performance experimental video codec based on predictive **Scalable Vector Quantization**.  
-The name **SVQNext** stands for **Scalable Vector Quantization – Next Generation**, describing the core approach of a scalable, VQ-based next-generation video compression pipeline.
+**SVQNext** is an experimental video codec based on predictive **Scalable Vector Quantization**.
+The name **SVQNext** stands for **Scalable Vector Quantization – Next Generation**, describing the core approach of a scalable, VQ-based video compression pipeline.
 
-SVQNext aims to provide HEVC-class compression while remaining fully **free software** under the **GNU AGPLv3**, **patent-neutral**, transparent and suitable for research, education and practical use.
+> **Project status**: Active research prototype. No stable release yet and all performance claims are targets, not validated benchmarks.
+
+SVQNext aims to eventually reach HEVC-class compression while remaining fully **free software** under the **GNU AGPLv3**, **patent-neutral**, transparent and suitable for research, education and practical use. Current builds should be treated as a laboratory proof-of-concept that still requires extensive optimisation, validation and peer review.
 
 ## Overview
 
@@ -108,19 +110,32 @@ Optimized/  SIMD-friendly kernels used by the codec core
 
 ## Why SVQNext Matters
 
-| Category | HEVC/H.265 | SVQNext |
+The motivation for SVQNext is to explore a free-software, patent-neutral alternative to mainstream transform codecs. The table below lists the intended direction of travel for the project rather than guaranteed properties of the current prototype.
+
+| Category | HEVC/H.265 | SVQNext (goal) |
 |:--|:--|:--|
 | Licensing | Patented, royalties | GNU AGPLv3 |
-| Compression | Excellent | ≈ HEVC-class |
-| Encoding Speed | Slow | Fast CPU encode |
-| Decoding Speed | Medium | 3–5× faster |
+| Compression | Excellent | Targeting comparable quality |
+| Encoding Speed | Slow | Targeting faster CPU encode |
+| Decoding Speed | Medium | Targeting faster CPU decode |
 | Bitstream | Complex, opaque | Educational and readable |
 
 ## License and Legal
 
-Distributed under the terms of the **GNU Affero General Public License v3.0**. See the `LICENSE` file for details.
+Distributed under the terms of the **GNU Affero General Public License v3.0**. See the `LICENSE` file for details. Earlier drafts referenced CC0/Public Domain; this repository is now exclusively AGPLv3-licensed to avoid ambiguity. If you require clarification, please open an issue or contact the maintainers.
+
 Includes a defensive publication to prevent future patent claims.
 No third-party code is included (see `THIRD_PARTY_DISCLOSURE.txt` for verification).
+
+## Validation & Next Steps
+
+Because SVQNext is still under heavy development, there are currently no official benchmark datasets or reproducible comparison reports. We plan to publish them once the codec stabilises. In the meantime we suggest:
+
+1. Building and running the encoder/decoder locally to confirm the pipeline works end-to-end.
+2. Performing ad-hoc comparisons against established codecs (x264/x265/AV1) on a small clip set.
+3. Sharing results and findings through issues or discussions to help guide optimisation priorities.
+
+Community contributions toward benchmarking scripts, dataset curation and reproducible measurement are especially welcome.
 
 ## Kurzüberblick (Deutsch)
 
