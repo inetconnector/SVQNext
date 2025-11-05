@@ -25,13 +25,16 @@ public static class Pipeline
                 throw new InvalidDataException("All frames must share the same dimensions.");
 
             ColorModel.RgbToYCbCr(frame, out var Yp, out var Cb, out var Cr, colorspace);
+            var alignedY = Transform.AlignToBlock(Yp, bs);
+            var alignedCb = Transform.AlignToBlock(Cb, bs);
+            var alignedCr = Transform.AlignToBlock(Cr, bs);
             if (useHdr)
-                for (var y = 0; y < Yp.GetLength(0); y++)
-                for (var x = 0; x < Yp.GetLength(1); x++)
-                    Yp[y, x] = ColorModel.EncodeHDR(Yp[y, x], bitdepth);
-            yFrames.Add(Yp);
-            cbFrames.Add(ColorModel.Subsample420(Cb));
-            crFrames.Add(ColorModel.Subsample420(Cr));
+                for (var y = 0; y < alignedY.GetLength(0); y++)
+                for (var x = 0; x < alignedY.GetLength(1); x++)
+                    alignedY[y, x] = ColorModel.EncodeHDR(alignedY[y, x], bitdepth);
+            yFrames.Add(alignedY);
+            cbFrames.Add(ColorModel.Subsample420(alignedCb));
+            crFrames.Add(ColorModel.Subsample420(alignedCr));
         }
 
         var Y = yFrames.ToArray();
@@ -146,6 +149,12 @@ public static class Pipeline
         var bitDepth = v.Meta.TryGetValue("bitdepth", out var depthStr) && int.TryParse(depthStr, out var parsedDepth)
             ? parsedDepth
             : 10;
+        var sourceHeight = v.Meta.TryGetValue("source_h", out var sourceHStr) && int.TryParse(sourceHStr, out var parsedH)
+            ? parsedH
+            : 0;
+        var sourceWidth = v.Meta.TryGetValue("source_w", out var sourceWStr) && int.TryParse(sourceWStr, out var parsedW)
+            ? parsedW
+            : 0;
 
         if (v.Chunks.Count == 0) throw new InvalidDataException("video track has no chunks");
 
@@ -263,9 +272,16 @@ public static class Pipeline
                     Yplane[y, x] = ColorModel.DecodeHDR(Yplane[y, x], bitDepth);
             }
 
+        if (sourceHeight <= 0 || sourceHeight > seqH) sourceHeight = seqH;
+        if (sourceWidth <= 0 || sourceWidth > seqW) sourceWidth = seqW;
+
         var rgb = new float[frameCount][,,];
         for (var t = 0; t < frameCount; t++)
-            rgb[t] = ColorModel.YCbCrToRgb(Yrec[t], cbUpsampled[t], crUpsampled[t], colorspace);
-        return (rgb, frameCount, seqH, seqW);
+        {
+            var full = ColorModel.YCbCrToRgb(Yrec[t], cbUpsampled[t], crUpsampled[t], colorspace);
+            rgb[t] = MathUtil.CropRgb(full, sourceHeight, sourceWidth);
+        }
+
+        return (rgb, frameCount, sourceHeight, sourceWidth);
     }
 }

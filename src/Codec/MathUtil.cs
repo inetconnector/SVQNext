@@ -93,4 +93,19 @@ public static class MathUtil
             arr[i + j + s, x] = a - b;
         }
     }
+
+    public static float[,,] CropRgb(float[,,] src, int targetH, int targetW)
+    {
+        if (src == null) throw new ArgumentNullException(nameof(src));
+        var srcH = src.GetLength(0);
+        var srcW = src.GetLength(1);
+        if (targetH <= 0 || targetH > srcH) targetH = srcH;
+        if (targetW <= 0 || targetW > srcW) targetW = srcW;
+        var cropped = new float[targetH, targetW, 3];
+        for (var y = 0; y < targetH; y++)
+        for (var x = 0; x < targetW; x++)
+        for (var c = 0; c < 3; c++)
+            cropped[y, x, c] = src[y, x, c];
+        return cropped;
+    }
 }
