@@ -21,8 +21,8 @@ public static class Encoder
 
         for (var t = 1; t < T; t++)
         {
-            var (mv, pred) = Motion.BlockMatch(Y[t - 1], Y[t], bs, search, QMotion, searchMode);
-            if (ShouldRefreshFrame(Y[t], pred, t, gop, quality, bs))
+            var bestReference = FindBestReference(Y, t, bs, search, QMotion, searchMode, quality);
+            if (ShouldRefreshFrame(Y[t], bestReference.Prediction, t, gop, quality, bs))
             {
                 hist.Clear();
                 frames[t] = EncodeFrame(Y[t], new float[shape.Hc, shape.Wc], codebook, meanVec, hist, bs, quality);
@@ -31,11 +31,10 @@ public static class Encoder
                 continue;
             }
 
-            var (refinedMv, refinedPred, modes) = SelectInterModes(Y[t - 1], Y[t], mv, bs, QMotion, quality);
-            frames[t] = EncodeFrame(Y[t], refinedPred, codebook, meanVec, hist, bs, quality, modes);
-            frames[t].MV = refinedMv;
-            frames[t].Modes = modes;
-            frames[t].RefPrev = t - 1;
+            frames[t] = EncodeFrame(Y[t], bestReference.Prediction, codebook, meanVec, hist, bs, quality, bestReference.MotionModes);
+            frames[t].MV = bestReference.MotionVectors;
+            frames[t].Modes = bestReference.MotionModes;
+            frames[t].RefPrev = bestReference.ReferenceIndex;
         }
 
         return new EncodedSequence
@@ -56,6 +55,7 @@ public static class Encoder
         var predictionModes = new byte[blockCount];
         var partitionModes = new byte[blockCount];
         var intraModes = new byte[blockCount];
+        var subPartitionMasks = new byte[blockCount];
         var residualModes = new byte[blockCount];
         var txQ = new short[blockCount * bs * bs];
         var recon = new float[Hc, Wc];
@@ -70,68 +70,78 @@ public static class Encoder
             var interPrediction = Transform.ExtractBlock(pred, x0, y0, bs);
             var lambda = Quantizer.Lambda(ComputeBlockEnergy(currentBlock), quality);
 
-            var best = EvaluateInterTransformCandidate(currentBlock, interPrediction, quality, BlockCodingMode.InterFull, bs);
+            var best = EvaluateInterTransformCandidate(currentBlock, interPrediction, quality, BlockCodingMode.InterFull, bs, lambda);
             best.Cost = best.Distortion + lambda * (best.BitCost + 8);
 
             if (bs >= 4)
             {
-                var splitInter = EvaluateInterTransformCandidate(currentBlock, interPrediction, quality, BlockCodingMode.InterSplit, bs / 2);
+                var splitInter = EvaluateInterTransformCandidate(currentBlock, interPrediction, quality, BlockCodingMode.InterSplit, bs / 2, lambda);
                 splitInter.Cost = splitInter.Distortion + lambda * (splitInter.BitCost + 10);
                 if (splitInter.Cost < best.Cost)
                     best = splitInter;
             }
 
-            var intraDc = EvaluateIntraCandidate(currentBlock, recon, x0, y0, bs, quality, BlockCodingMode.IntraDcFull);
+            var intraDc = EvaluateIntraCandidate(currentBlock, recon, x0, y0, bs, quality, BlockCodingMode.IntraDcFull, lambda);
             intraDc.Cost = intraDc.Distortion + lambda * (intraDc.BitCost + 7);
             if (intraDc.Cost < best.Cost)
                 best = intraDc;
 
-            var intraVertical = EvaluateIntraCandidate(currentBlock, recon, x0, y0, bs, quality, BlockCodingMode.IntraVerticalFull);
+            var intraVertical = EvaluateIntraCandidate(currentBlock, recon, x0, y0, bs, quality, BlockCodingMode.IntraVerticalFull, lambda);
             intraVertical.Cost = intraVertical.Distortion + lambda * (intraVertical.BitCost + 7);
             if (intraVertical.Cost < best.Cost)
                 best = intraVertical;
 
-            var intraHorizontal = EvaluateIntraCandidate(currentBlock, recon, x0, y0, bs, quality, BlockCodingMode.IntraHorizontalFull);
+            var intraHorizontal = EvaluateIntraCandidate(currentBlock, recon, x0, y0, bs, quality, BlockCodingMode.IntraHorizontalFull, lambda);
             intraHorizontal.Cost = intraHorizontal.Distortion + lambda * (intraHorizontal.BitCost + 7);
             if (intraHorizontal.Cost < best.Cost)
                 best = intraHorizontal;
 
-            var intraPlanar = EvaluateIntraCandidate(currentBlock, recon, x0, y0, bs, quality, BlockCodingMode.IntraPlanarFull);
+            var intraPlanar = EvaluateIntraCandidate(currentBlock, recon, x0, y0, bs, quality, BlockCodingMode.IntraPlanarFull, lambda);
             intraPlanar.Cost = intraPlanar.Distortion + lambda * (intraPlanar.BitCost + 7);
             if (intraPlanar.Cost < best.Cost)
                 best = intraPlanar;
 
-            var intraDiagonal = EvaluateIntraCandidate(currentBlock, recon, x0, y0, bs, quality, BlockCodingMode.IntraDiagonalFull);
+            var intraDiagonal = EvaluateIntraCandidate(currentBlock, recon, x0, y0, bs, quality, BlockCodingMode.IntraDiagonalFull, lambda);
             intraDiagonal.Cost = intraDiagonal.Distortion + lambda * (intraDiagonal.BitCost + 7);
             if (intraDiagonal.Cost < best.Cost)
                 best = intraDiagonal;
 
+            var intraSmooth = EvaluateIntraCandidate(currentBlock, recon, x0, y0, bs, quality, BlockCodingMode.IntraSmoothFull, lambda);
+            intraSmooth.Cost = intraSmooth.Distortion + lambda * (intraSmooth.BitCost + 7);
+            if (intraSmooth.Cost < best.Cost)
+                best = intraSmooth;
+
             if (bs >= 4)
             {
-                var splitIntraDc = EvaluateIntraCandidate(currentBlock, recon, x0, y0, bs, quality, BlockCodingMode.IntraDcSplit);
+                var splitIntraDc = EvaluateIntraCandidate(currentBlock, recon, x0, y0, bs, quality, BlockCodingMode.IntraDcSplit, lambda);
                 splitIntraDc.Cost = splitIntraDc.Distortion + lambda * (splitIntraDc.BitCost + 9);
                 if (splitIntraDc.Cost < best.Cost)
                     best = splitIntraDc;
 
-                var splitIntraVertical = EvaluateIntraCandidate(currentBlock, recon, x0, y0, bs, quality, BlockCodingMode.IntraVerticalSplit);
+                var splitIntraVertical = EvaluateIntraCandidate(currentBlock, recon, x0, y0, bs, quality, BlockCodingMode.IntraVerticalSplit, lambda);
                 splitIntraVertical.Cost = splitIntraVertical.Distortion + lambda * (splitIntraVertical.BitCost + 9);
                 if (splitIntraVertical.Cost < best.Cost)
                     best = splitIntraVertical;
 
-                var splitIntraHorizontal = EvaluateIntraCandidate(currentBlock, recon, x0, y0, bs, quality, BlockCodingMode.IntraHorizontalSplit);
+                var splitIntraHorizontal = EvaluateIntraCandidate(currentBlock, recon, x0, y0, bs, quality, BlockCodingMode.IntraHorizontalSplit, lambda);
                 splitIntraHorizontal.Cost = splitIntraHorizontal.Distortion + lambda * (splitIntraHorizontal.BitCost + 9);
                 if (splitIntraHorizontal.Cost < best.Cost)
                     best = splitIntraHorizontal;
 
-                var splitIntraPlanar = EvaluateIntraCandidate(currentBlock, recon, x0, y0, bs, quality, BlockCodingMode.IntraPlanarSplit);
+                var splitIntraPlanar = EvaluateIntraCandidate(currentBlock, recon, x0, y0, bs, quality, BlockCodingMode.IntraPlanarSplit, lambda);
                 splitIntraPlanar.Cost = splitIntraPlanar.Distortion + lambda * (splitIntraPlanar.BitCost + 9);
                 if (splitIntraPlanar.Cost < best.Cost)
                     best = splitIntraPlanar;
 
-                var splitIntraDiagonal = EvaluateIntraCandidate(currentBlock, recon, x0, y0, bs, quality, BlockCodingMode.IntraDiagonalSplit);
+                var splitIntraDiagonal = EvaluateIntraCandidate(currentBlock, recon, x0, y0, bs, quality, BlockCodingMode.IntraDiagonalSplit, lambda);
                 splitIntraDiagonal.Cost = splitIntraDiagonal.Distortion + lambda * (splitIntraDiagonal.BitCost + 9);
                 if (splitIntraDiagonal.Cost < best.Cost)
                     best = splitIntraDiagonal;
+
+                var splitIntraSmooth = EvaluateIntraCandidate(currentBlock, recon, x0, y0, bs, quality, BlockCodingMode.IntraSmoothSplit, lambda);
+                splitIntraSmooth.Cost = splitIntraSmooth.Distortion + lambda * (splitIntraSmooth.BitCost + 9);
+                if (splitIntraSmooth.Cost < best.Cost)
+                    best = splitIntraSmooth;
             }
 
             if (motionModes[blockIndex] != 0)
@@ -146,6 +156,7 @@ public static class Encoder
 
             residualModes[blockIndex] = best.Mode;
             BlockSyntax.DecodeLegacyMode(best.Mode, out predictionModes[blockIndex], out partitionModes[blockIndex], out intraModes[blockIndex]);
+            subPartitionMasks[blockIndex] = best.SubPartitionMask;
             Array.Copy(best.Coefficients, 0, txQ, blockIndex * bs * bs, bs * bs);
             Transform.WriteBlock(recon, x0, y0, best.Reconstruction);
         }
@@ -157,6 +168,7 @@ public static class Encoder
             PredictionModes = predictionModes,
             PartitionModes = partitionModes,
             IntraModes = intraModes,
+            SubPartitionMasks = subPartitionMasks,
             ResidualModes = residualModes,
             TxQ = txQ,
             Idx = Array.Empty<ushort>(),
@@ -176,15 +188,15 @@ public static class Encoder
             0);
     }
 
-    private static BlockCandidate EvaluateInterTransformCandidate(float[,] currentBlock, float[,] prediction, string quality, byte mode, int blockSize)
+    private static BlockCandidate EvaluateInterTransformCandidate(float[,] currentBlock, float[,] prediction, string quality, byte mode, int blockSize, double lambda)
     {
         if (mode == BlockCodingMode.InterFull)
-            return EvaluateTransformUnit(currentBlock, prediction, quality, false, mode);
+            return EvaluateTransformUnit(currentBlock, prediction, quality, mode);
 
-        return EvaluateSplitCandidate(currentBlock, prediction, quality, false, mode, blockSize);
+        return EvaluateSplitCandidate(currentBlock, prediction, quality, mode, blockSize, lambda);
     }
 
-    private static BlockCandidate EvaluateIntraCandidate(float[,] currentBlock, float[,] reconFrame, int x0, int y0, int bs, string quality, byte mode)
+    private static BlockCandidate EvaluateIntraCandidate(float[,] currentBlock, float[,] reconFrame, int x0, int y0, int bs, string quality, byte mode, double lambda)
     {
         var predictionMode = mode switch
         {
@@ -192,17 +204,18 @@ public static class Encoder
             BlockCodingMode.IntraVerticalFull or BlockCodingMode.IntraVerticalSplit => BlockCodingMode.IntraVerticalFull,
             BlockCodingMode.IntraHorizontalFull or BlockCodingMode.IntraHorizontalSplit => BlockCodingMode.IntraHorizontalFull,
             BlockCodingMode.IntraPlanarFull or BlockCodingMode.IntraPlanarSplit => BlockCodingMode.IntraPlanarFull,
-            _ => BlockCodingMode.IntraDiagonalFull
+            BlockCodingMode.IntraDiagonalFull or BlockCodingMode.IntraDiagonalSplit => BlockCodingMode.IntraDiagonalFull,
+            _ => BlockCodingMode.IntraSmoothFull
         };
 
         var prediction = BuildIntraPrediction(reconFrame, x0, y0, bs, predictionMode);
         if (!BlockCodingMode.IsSplit(mode))
-            return EvaluateTransformUnit(currentBlock, prediction, quality, true, mode);
+            return EvaluateTransformUnit(currentBlock, prediction, quality, mode);
 
-        return EvaluateSplitCandidate(currentBlock, prediction, quality, true, mode, bs / 2);
+        return EvaluateSplitCandidate(currentBlock, prediction, quality, mode, bs / 2, lambda);
     }
 
-    private static BlockCandidate EvaluateSplitCandidate(float[,] currentBlock, float[,] prediction, string quality, bool intra, byte mode, int subSize)
+    private static BlockCandidate EvaluateSplitCandidate(float[,] currentBlock, float[,] prediction, string quality, byte mode, int subSize, double lambda)
     {
         var bs = currentBlock.GetLength(0);
         var tx = new short[bs * bs];
@@ -210,12 +223,51 @@ public static class Encoder
         double distortion = 0;
         var bitCost = 0;
         var qOffset = 0;
+        byte subPartitionMask = 0;
+        var quadrantIndex = 0;
         for (var subY = 0; subY < bs; subY += subSize)
         for (var subX = 0; subX < bs; subX += subSize)
         {
             var currentSub = ExtractSubBlock(currentBlock, subX, subY, subSize);
             var predictionSub = ExtractSubBlock(prediction, subX, subY, subSize);
-            var candidate = EvaluateTransformUnit(currentSub, predictionSub, quality, intra, mode);
+            var candidate = EvaluateTransformUnit(currentSub, predictionSub, quality, mode);
+            if (subSize >= 4)
+            {
+                var nestedCandidate = EvaluateNestedSplitCandidate(currentSub, predictionSub, quality, mode, subSize / 2);
+                var directScore = candidate.Distortion + lambda * candidate.BitCost;
+                var nestedScore = nestedCandidate.Distortion + lambda * (nestedCandidate.BitCost + 3);
+                if (nestedScore < directScore)
+                {
+                    candidate = nestedCandidate;
+                    subPartitionMask |= (byte)(1 << quadrantIndex);
+                }
+            }
+
+            Array.Copy(candidate.Coefficients, 0, tx, qOffset, candidate.Coefficients.Length);
+            qOffset += candidate.Coefficients.Length;
+            distortion += candidate.Distortion;
+            bitCost += candidate.BitCost;
+            WriteSubBlock(recon, subX, subY, candidate.Reconstruction);
+            quadrantIndex++;
+        }
+
+        return new BlockCandidate(mode, tx, recon, distortion, bitCost, subPartitionMask);
+    }
+
+    private static BlockCandidate EvaluateNestedSplitCandidate(float[,] currentBlock, float[,] prediction, string quality, byte mode, int leafSize)
+    {
+        var bs = currentBlock.GetLength(0);
+        var tx = new short[bs * bs];
+        var recon = new float[bs, bs];
+        double distortion = 0;
+        var bitCost = 0;
+        var qOffset = 0;
+        for (var subY = 0; subY < bs; subY += leafSize)
+        for (var subX = 0; subX < bs; subX += leafSize)
+        {
+            var currentLeaf = ExtractSubBlock(currentBlock, subX, subY, leafSize);
+            var predictionLeaf = ExtractSubBlock(prediction, subX, subY, leafSize);
+            var candidate = EvaluateTransformUnit(currentLeaf, predictionLeaf, quality, mode);
             Array.Copy(candidate.Coefficients, 0, tx, qOffset, candidate.Coefficients.Length);
             qOffset += candidate.Coefficients.Length;
             distortion += candidate.Distortion;
@@ -226,7 +278,7 @@ public static class Encoder
         return new BlockCandidate(mode, tx, recon, distortion, bitCost);
     }
 
-    private static BlockCandidate EvaluateTransformUnit(float[,] currentBlock, float[,] prediction, string quality, bool intra, byte mode)
+    private static BlockCandidate EvaluateTransformUnit(float[,] currentBlock, float[,] prediction, string quality, byte mode)
     {
         var bs = currentBlock.GetLength(0);
         var residual = Transform.Sub(currentBlock, prediction);
@@ -238,7 +290,7 @@ public static class Encoder
         for (var x = 0; x < bs; x++)
         {
             var weight = 1f + 0.12f * (x + y);
-            var step = Quantizer.TransformStep(quality, intra, bs) * weight;
+            var step = Quantizer.TransformStep(quality, mode, bs) * weight;
             var qv = Quantizer.QuantizeTransform(coeffs[y, x], step);
             q[i++] = qv;
             dequantized[y, x] = Quantizer.DequantizeTransform(qv, step);
@@ -250,7 +302,7 @@ public static class Encoder
         for (var x = 0; x < bs; x++)
         {
             var weight = 1f + 0.12f * (x + y);
-            var step = Quantizer.TransformStep(quality, intra, bs) * weight;
+            var step = Quantizer.TransformStep(quality, mode, bs) * weight;
             dequantized[y, x] = Quantizer.DequantizeTransform(q[i++], step);
         }
 
@@ -307,6 +359,7 @@ public static class Encoder
                 BlockCodingMode.IntraPlanarFull when topAvailable && leftAvailable => PredictPlanar(reconFrame, x0, y0, bs, x, y),
                 BlockCodingMode.IntraDiagonalFull when topAvailable => reconFrame[y0 - 1, x0 + Math.Min(bs - 1, x + y)],
                 BlockCodingMode.IntraDiagonalFull when leftAvailable => reconFrame[y0 + Math.Min(bs - 1, x + y), x0 - 1],
+                BlockCodingMode.IntraSmoothFull => PredictSmooth(reconFrame, x0, y0, bs, x, y, topAvailable, leftAvailable, dc),
                 _ => dc
             };
         }
@@ -321,6 +374,17 @@ public static class Encoder
         var wx = x / (float)Math.Max(1, bs - 1);
         var wy = y / (float)Math.Max(1, bs - 1);
         return ((1f - wy) * top + (1f - wx) * left) * 0.5f + (wx + wy) * 0.25f * (top + left);
+    }
+
+    private static float PredictSmooth(float[,] reconFrame, int x0, int y0, int bs, int x, int y, bool topAvailable, bool leftAvailable, float dc)
+    {
+        var top = topAvailable ? reconFrame[y0 - 1, x0 + x] : dc;
+        var left = leftAvailable ? reconFrame[y0 + y, x0 - 1] : dc;
+        var blendX = x / (float)Math.Max(1, bs - 1);
+        var blendY = y / (float)Math.Max(1, bs - 1);
+        var edge = ((1f - blendY) * top + (1f - blendX) * left) * 0.5f;
+        var interior = dc * (0.65f + 0.35f * (blendX + blendY) * 0.5f);
+        return 0.6f * edge + 0.4f * interior;
     }
 
     private static float[,] ExtractSubBlock(float[,] block, int x0, int y0, int bs)
@@ -567,15 +631,90 @@ public static class Encoder
         return highErrorBlocks / (double)totalBlocks;
     }
 
+    private static ReferenceCandidate FindBestReference(float[][,] frames, int frameIndex, int bs, int search, int qMotion, string searchMode, string quality)
+    {
+        var startRef = Math.Max(0, frameIndex - 3);
+        ReferenceCandidate? best = null;
+        for (var refIndex = frameIndex - 1; refIndex >= startRef; refIndex--)
+        {
+            var adjustedSearch = refIndex == frameIndex - 1 ? search : Math.Max(1, search - 1);
+            var (mv, pred) = Motion.BlockMatch(frames[refIndex], frames[frameIndex], bs, adjustedSearch, qMotion, searchMode);
+            var (refinedMv, refinedPred, modes) = SelectInterModes(frames[refIndex], frames[frameIndex], mv, bs, qMotion, quality);
+            var mse = ComputeFrameMse(frames[frameIndex], refinedPred);
+            var bitCost = EstimateMotionBitCost(refinedMv, modes);
+            var agePenalty = (frameIndex - refIndex - 1) * 10;
+            var score = mse + 0.00001 * (bitCost + agePenalty);
+            var candidate = new ReferenceCandidate(refIndex, refinedMv, refinedPred, modes, mse, bitCost, score);
+            if (best == null || candidate.Score < best.Score)
+                best = candidate;
+        }
+
+        return best ?? throw new InvalidOperationException("No reference candidate available.");
+    }
+
+    private static int EstimateMotionBitCost(short[,,] mv, byte[] modes)
+    {
+        var gh = mv.GetLength(0);
+        var gw = mv.GetLength(1);
+        var bits = 0;
+        for (var by = 0; by < gh; by++)
+        for (var bx = 0; bx < gw; bx++)
+        {
+            var mode = modes[by * gw + bx];
+            if (mode is 2 or 3)
+            {
+                bits += 1;
+                continue;
+            }
+
+            bits += 3;
+            for (var comp = 0; comp < 2; comp++)
+            {
+                var predictor = PredictMotionComponent(mv, by, bx, comp);
+                var delta = (short)(mv[by, bx, comp] - predictor);
+                bits += Quantizer.EstimateVarUIntBits(Quantizer.ZigZagEncode(delta));
+            }
+        }
+
+        return bits;
+    }
+
+    private static short PredictMotionComponent(short[,,] mv, int by, int bx, int comp)
+    {
+        var hasLeft = bx > 0;
+        var hasTop = by > 0;
+        var hasTopLeft = hasLeft && hasTop;
+        if (hasLeft && hasTop && hasTopLeft)
+        {
+            var left = mv[by, bx - 1, comp];
+            var top = mv[by - 1, bx, comp];
+            var topLeft = mv[by - 1, bx - 1, comp];
+            return Median(left, top, (short)(left + top - topLeft));
+        }
+
+        if (hasLeft) return mv[by, bx - 1, comp];
+        if (hasTop) return mv[by - 1, bx, comp];
+        return 0;
+    }
+
+    private static short Median(short a, short b, short c)
+    {
+        if (a > b) (a, b) = (b, a);
+        if (b > c) (b, c) = (c, b);
+        if (a > b) (a, b) = (b, a);
+        return b;
+    }
+
     private sealed class BlockCandidate
     {
-        public BlockCandidate(byte mode, short[] coefficients, float[,] reconstruction, double distortion, int bitCost)
+        public BlockCandidate(byte mode, short[] coefficients, float[,] reconstruction, double distortion, int bitCost, byte subPartitionMask = 0)
         {
             Mode = mode;
             Coefficients = coefficients;
             Reconstruction = reconstruction;
             Distortion = distortion;
             BitCost = bitCost;
+            SubPartitionMask = subPartitionMask;
         }
 
         public byte Mode { get; }
@@ -583,6 +722,29 @@ public static class Encoder
         public float[,] Reconstruction { get; }
         public double Distortion { get; }
         public int BitCost { get; }
+        public byte SubPartitionMask { get; }
         public double Cost { get; set; }
+    }
+
+    private sealed class ReferenceCandidate
+    {
+        public ReferenceCandidate(int referenceIndex, short[,,] motionVectors, float[,] prediction, byte[] motionModes, double mse, int bitCost, double score)
+        {
+            ReferenceIndex = referenceIndex;
+            MotionVectors = motionVectors;
+            Prediction = prediction;
+            MotionModes = motionModes;
+            Mse = mse;
+            BitCost = bitCost;
+            Score = score;
+        }
+
+        public int ReferenceIndex { get; }
+        public short[,,] MotionVectors { get; }
+        public float[,] Prediction { get; }
+        public byte[] MotionModes { get; }
+        public double Mse { get; }
+        public int BitCost { get; }
+        public double Score { get; }
     }
 }

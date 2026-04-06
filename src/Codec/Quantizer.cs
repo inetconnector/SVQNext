@@ -57,6 +57,35 @@ public static class Quantizer
         return baseStep;
     }
 
+    public static float TransformStep(string quality, byte mode, int blockSize)
+    {
+        var intra = BlockCodingMode.IsIntra(mode);
+        var baseStep = TransformStep(quality, intra, blockSize);
+
+        if (mode == BlockCodingMode.Skip)
+            return baseStep;
+
+        if (mode == BlockCodingMode.InterSplit || mode == BlockCodingMode.IntraDcSplit ||
+            mode == BlockCodingMode.IntraVerticalSplit || mode == BlockCodingMode.IntraHorizontalSplit ||
+            mode == BlockCodingMode.IntraPlanarSplit || mode == BlockCodingMode.IntraDiagonalSplit ||
+            mode == BlockCodingMode.IntraSmoothSplit)
+        {
+            baseStep *= 0.92f;
+        }
+
+        if (mode == BlockCodingMode.IntraPlanarFull || mode == BlockCodingMode.IntraPlanarSplit ||
+            mode == BlockCodingMode.IntraSmoothFull || mode == BlockCodingMode.IntraSmoothSplit)
+        {
+            baseStep *= 0.90f;
+        }
+        else if (mode == BlockCodingMode.IntraDiagonalFull || mode == BlockCodingMode.IntraDiagonalSplit)
+        {
+            baseStep *= 0.94f;
+        }
+
+        return baseStep;
+    }
+
     public static short QuantizeTransform(float value, float step)
     {
         step = Math.Max(step, 1e-6f);

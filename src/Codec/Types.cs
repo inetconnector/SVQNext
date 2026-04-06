@@ -9,6 +9,7 @@ public struct EncodedFrame
     public byte[] PredictionModes;
     public byte[] PartitionModes;
     public byte[] IntraModes;
+    public byte[] SubPartitionMasks;
     public byte[] ResidualModes;
     public short[] TxQ;
     public ushort[] Idx;
@@ -45,10 +46,12 @@ public static class BlockCodingMode
     public const byte IntraPlanarSplit = 10;
     public const byte IntraDiagonalFull = 11;
     public const byte IntraDiagonalSplit = 12;
+    public const byte IntraSmoothFull = 13;
+    public const byte IntraSmoothSplit = 14;
 
     public static bool IsSplit(byte mode)
     {
-        return mode is InterSplit or IntraDcSplit or IntraVerticalSplit or IntraHorizontalSplit or IntraPlanarSplit or IntraDiagonalSplit;
+        return mode is InterSplit or IntraDcSplit or IntraVerticalSplit or IntraHorizontalSplit or IntraPlanarSplit or IntraDiagonalSplit or IntraSmoothSplit;
     }
 
     public static bool IsIntra(byte mode)
@@ -77,6 +80,7 @@ public static class IntraPredictor
     public const byte Horizontal = 2;
     public const byte Planar = 3;
     public const byte Diagonal = 4;
+    public const byte Smooth = 5;
 }
 
 public static class BlockSyntax
@@ -145,6 +149,15 @@ public static class BlockSyntax
                 partitionMode = PartitionMode.Split;
                 intraMode = IntraPredictor.Diagonal;
                 return;
+            case BlockCodingMode.IntraSmoothFull:
+                predictionMode = PredictionMode.Intra;
+                intraMode = IntraPredictor.Smooth;
+                return;
+            case BlockCodingMode.IntraSmoothSplit:
+                predictionMode = PredictionMode.Intra;
+                partitionMode = PartitionMode.Split;
+                intraMode = IntraPredictor.Smooth;
+                return;
             default:
                 return;
         }
@@ -170,6 +183,8 @@ public static class BlockSyntax
             (PartitionMode.Split, IntraPredictor.Horizontal) => BlockCodingMode.IntraHorizontalSplit,
             (PartitionMode.Split, IntraPredictor.Planar) => BlockCodingMode.IntraPlanarSplit,
             (PartitionMode.Split, IntraPredictor.Diagonal) => BlockCodingMode.IntraDiagonalSplit,
+            (PartitionMode.Full, IntraPredictor.Smooth) => BlockCodingMode.IntraSmoothFull,
+            (PartitionMode.Split, IntraPredictor.Smooth) => BlockCodingMode.IntraSmoothSplit,
             _ => BlockCodingMode.IntraDcFull
         };
     }

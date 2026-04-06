@@ -165,6 +165,9 @@ public static class Pipeline
             var intraModeBytes = SerializeIntraModes(f.IntraModes);
             bw.Write(intraModeBytes.Length);
             bw.Write(intraModeBytes);
+            var subPartitionMaskBytes = SerializeSubPartitionMasks(f.SubPartitionMasks);
+            bw.Write(subPartitionMaskBytes.Length);
+            bw.Write(subPartitionMaskBytes);
             var txBytes = SerializeTransformCoefficients(f.TxQ, bs);
             bw.Write(txBytes.Length);
             bw.Write(txBytes);
@@ -190,7 +193,7 @@ public static class Pipeline
             { "qmotion", QMotion.ToString() }, { "searchmode", searchMode },
             { "quality", quality },
             { "loop", filters ? "1" : "0" }, { "useb", useB ? "1" : "0" },
-            { "gop", gop.ToString() }, { "vqmode", "gsvq1" }, { "intermode", "skip-merge1" }, { "chunkcodec", "deflate1" }, { "mvmode", "predvar1" }, { "chromamode", "pred420-1" }, { "residualmode", "hadamard-rdo2" }, { "predsyntax", "splitpred1" }
+            { "gop", gop.ToString() }, { "vqmode", "gsvq1" }, { "intermode", "skip-merge1" }, { "chunkcodec", "deflate1" }, { "mvmode", "predvar1" }, { "chromamode", "pred420-1" }, { "residualmode", "hadamard-rdo2" }, { "predsyntax", "splitpred2" }
         };
         var vtrack = new Track("video", vmeta, chunks);
         var mux = new Mux(new List<Track> { vtrack });
@@ -272,7 +275,9 @@ public static class Pipeline
         var residualMode = v.Meta.TryGetValue("residualmode", out var residualModeStr) ? residualModeStr : string.Empty;
         var useTransformResiduals = residualMode is "hadamard-rdo1" or "hadamard-rdo2";
         var usePackedTransformResiduals = residualMode == "hadamard-rdo2";
-        var useSeparatedPredictionSyntax = v.Meta.TryGetValue("predsyntax", out var predSyntax) && predSyntax == "splitpred1";
+        var predictionSyntax = v.Meta.TryGetValue("predsyntax", out var predSyntax) ? predSyntax : string.Empty;
+        var useSeparatedPredictionSyntax = predictionSyntax is "splitpred1" or "splitpred2";
+        var useSubPartitionMasks = predictionSyntax == "splitpred2";
         var quality = v.Meta.TryGetValue("quality", out var qualityStr) ? qualityStr : "medium";
 
         var cbUpsampled = new List<float[,]>(frameCount);
@@ -312,6 +317,15 @@ public static class Pipeline
                     frame.PartitionModes = DeserializePartitionModes(br.ReadBytes(nPartitionModes), gh * gw);
                     var nIntraModes = br.ReadInt32();
                     frame.IntraModes = DeserializeIntraModes(br.ReadBytes(nIntraModes), gh * gw);
+                    if (useSubPartitionMasks)
+                    {
+                        var nSubPartitionMasks = br.ReadInt32();
+                        frame.SubPartitionMasks = DeserializeSubPartitionMasks(br.ReadBytes(nSubPartitionMasks), gh * gw);
+                    }
+                    else
+                    {
+                        frame.SubPartitionMasks = new byte[gh * gw];
+                    }
                     frame.ResidualModes = BuildResidualModes(frame.PredictionModes, frame.PartitionModes, frame.IntraModes);
                 }
                 else
@@ -319,6 +333,7 @@ public static class Pipeline
                     frame.PredictionModes = Array.Empty<byte>();
                     frame.PartitionModes = Array.Empty<byte>();
                     frame.IntraModes = Array.Empty<byte>();
+                    frame.SubPartitionMasks = new byte[gh * gw];
                     var nResidualModes = br.ReadInt32();
                     if (usePackedTransformResiduals)
                     {
@@ -350,6 +365,7 @@ public static class Pipeline
                 frame.PredictionModes = Array.Empty<byte>();
                 frame.PartitionModes = Array.Empty<byte>();
                 frame.IntraModes = Array.Empty<byte>();
+                frame.SubPartitionMasks = Array.Empty<byte>();
                 frame.ResidualModes = Array.Empty<byte>();
                 frame.TxQ = Array.Empty<short>();
                 var nIdx = br.ReadInt32();
@@ -678,6 +694,11 @@ public static class Pipeline
         return SerializePackedBits(modes, 3);
     }
 
+    private static byte[] SerializeSubPartitionMasks(byte[] masks)
+    {
+        return SerializePackedBits(masks, 4);
+    }
+
     private static byte[] SerializeInterModes(byte[] modes)
     {
         var packed = new byte[(modes.Length + 3) / 4];
@@ -715,6 +736,11 @@ public static class Pipeline
     private static byte[] DeserializeIntraModes(byte[] packed, int expectedCount)
     {
         return DeserializePackedBits(packed, expectedCount, 3);
+    }
+
+    private static byte[] DeserializeSubPartitionMasks(byte[] packed, int expectedCount)
+    {
+        return DeserializePackedBits(packed, expectedCount, 4);
     }
 
     private static byte[] DeserializeResidualModes(byte[] packed, int expectedCount)

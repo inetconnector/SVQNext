@@ -57,24 +57,26 @@ public static class Decoder
             else if (mode == BlockCodingMode.InterFull)
             {
                 var prediction = Transform.ExtractBlock(interPrediction, x0, y0, bs);
-                block = ReconstructTransformBlock(tx, prediction, bs, quality, false);
+                block = ReconstructTransformBlock(tx, prediction, bs, quality, mode);
             }
             else if (mode == BlockCodingMode.InterSplit)
             {
                 var prediction = Transform.ExtractBlock(interPrediction, x0, y0, bs);
-                block = ReconstructSplitBlock(tx, prediction, bs, quality, false);
+                var subPartitionMask = frame.SubPartitionMasks is { Length: > 0 } ? frame.SubPartitionMasks[blockIndex] : (byte)0;
+                block = ReconstructSplitBlock(tx, prediction, bs, quality, mode, subPartitionMask);
             }
             else if (mode == BlockCodingMode.IntraDcFull || mode == BlockCodingMode.IntraVerticalFull ||
                      mode == BlockCodingMode.IntraHorizontalFull || mode == BlockCodingMode.IntraPlanarFull ||
-                     mode == BlockCodingMode.IntraDiagonalFull)
+                     mode == BlockCodingMode.IntraDiagonalFull || mode == BlockCodingMode.IntraSmoothFull)
             {
                 var prediction = BuildIntraPrediction(output, x0, y0, bs, mode);
-                block = ReconstructTransformBlock(tx, prediction, bs, quality, true);
+                block = ReconstructTransformBlock(tx, prediction, bs, quality, mode);
             }
             else
             {
                 var prediction = BuildIntraPrediction(output, x0, y0, bs, mode);
-                block = ReconstructSplitBlock(tx, prediction, bs, quality, true);
+                var subPartitionMask = frame.SubPartitionMasks is { Length: > 0 } ? frame.SubPartitionMasks[blockIndex] : (byte)0;
+                block = ReconstructSplitBlock(tx, prediction, bs, quality, mode, subPartitionMask);
             }
 
             Transform.WriteBlock(output, x0, y0, block);
@@ -125,7 +127,7 @@ public static class Decoder
         return Motion.Compensate(reference, frame.MV, bs, seq.QMotion);
     }
 
-    private static float[,] ReconstructTransformBlock(short[] q, float[,] prediction, int bs, string quality, bool intra)
+    private static float[,] ReconstructTransformBlock(short[] q, float[,] prediction, int bs, string quality, byte mode)
     {
         var coeffs = new float[bs, bs];
         var i = 0;
@@ -133,7 +135,7 @@ public static class Decoder
         for (var x = 0; x < bs; x++)
         {
             var weight = 1f + 0.12f * (x + y);
-            var step = Quantizer.TransformStep(quality, intra, bs) * weight;
+            var step = Quantizer.TransformStep(quality, mode, bs) * weight;
             coeffs[y, x] = Quantizer.DequantizeTransform(q[i++], step);
         }
 
@@ -145,11 +147,12 @@ public static class Decoder
         return block;
     }
 
-    private static float[,] ReconstructSplitBlock(short[] q, float[,] prediction, int bs, string quality, bool intra)
+    private static float[,] ReconstructSplitBlock(short[] q, float[,] prediction, int bs, string quality, byte mode, byte subPartitionMask)
     {
         var subSize = bs / 2;
         var block = new float[bs, bs];
         var qOffset = 0;
+        var quadrantIndex = 0;
         for (var subY = 0; subY < bs; subY += subSize)
         for (var subX = 0; subX < bs; subX += subSize)
         {
@@ -158,7 +161,31 @@ public static class Decoder
             Array.Copy(q, qOffset, subQ, 0, coeffCount);
             qOffset += coeffCount;
             var predictionSub = ExtractSubBlock(prediction, subX, subY, subSize);
-            var reconSub = ReconstructTransformBlock(subQ, predictionSub, subSize, quality, intra);
+            var splitFurther = subSize >= 4 && ((subPartitionMask >> quadrantIndex) & 1) != 0;
+            var reconSub = splitFurther
+                ? ReconstructNestedSplitBlock(subQ, predictionSub, subSize, quality, mode)
+                : ReconstructTransformBlock(subQ, predictionSub, subSize, quality, mode);
+            WriteSubBlock(block, subX, subY, reconSub);
+            quadrantIndex++;
+        }
+
+        return block;
+    }
+
+    private static float[,] ReconstructNestedSplitBlock(short[] q, float[,] prediction, int bs, string quality, byte mode)
+    {
+        var leafSize = bs / 2;
+        var block = new float[bs, bs];
+        var qOffset = 0;
+        for (var subY = 0; subY < bs; subY += leafSize)
+        for (var subX = 0; subX < bs; subX += leafSize)
+        {
+            var coeffCount = leafSize * leafSize;
+            var subQ = new short[coeffCount];
+            Array.Copy(q, qOffset, subQ, 0, coeffCount);
+            qOffset += coeffCount;
+            var predictionSub = ExtractSubBlock(prediction, subX, subY, leafSize);
+            var reconSub = ReconstructTransformBlock(subQ, predictionSub, leafSize, quality, mode);
             WriteSubBlock(block, subX, subY, reconSub);
         }
 
@@ -203,6 +230,7 @@ public static class Decoder
             BlockCodingMode.IntraHorizontalSplit => BlockCodingMode.IntraHorizontalFull,
             BlockCodingMode.IntraPlanarSplit => BlockCodingMode.IntraPlanarFull,
             BlockCodingMode.IntraDiagonalSplit => BlockCodingMode.IntraDiagonalFull,
+            BlockCodingMode.IntraSmoothSplit => BlockCodingMode.IntraSmoothFull,
             _ => mode
         };
 
@@ -216,6 +244,7 @@ public static class Decoder
                 BlockCodingMode.IntraPlanarFull when topAvailable && leftAvailable => PredictPlanar(reconFrame, x0, y0, bs, x, y),
                 BlockCodingMode.IntraDiagonalFull when topAvailable => reconFrame[y0 - 1, x0 + Math.Min(bs - 1, x + y)],
                 BlockCodingMode.IntraDiagonalFull when leftAvailable => reconFrame[y0 + Math.Min(bs - 1, x + y), x0 - 1],
+                BlockCodingMode.IntraSmoothFull => PredictSmooth(reconFrame, x0, y0, bs, x, y, topAvailable, leftAvailable, dc),
                 _ => dc
             };
         }
@@ -230,6 +259,17 @@ public static class Decoder
         var wx = x / (float)Math.Max(1, bs - 1);
         var wy = y / (float)Math.Max(1, bs - 1);
         return ((1f - wy) * top + (1f - wx) * left) * 0.5f + (wx + wy) * 0.25f * (top + left);
+    }
+
+    private static float PredictSmooth(float[,] reconFrame, int x0, int y0, int bs, int x, int y, bool topAvailable, bool leftAvailable, float dc)
+    {
+        var top = topAvailable ? reconFrame[y0 - 1, x0 + x] : dc;
+        var left = leftAvailable ? reconFrame[y0 + y, x0 - 1] : dc;
+        var blendX = x / (float)Math.Max(1, bs - 1);
+        var blendY = y / (float)Math.Max(1, bs - 1);
+        var edge = ((1f - blendY) * top + (1f - blendX) * left) * 0.5f;
+        var interior = dc * (0.65f + 0.35f * (blendX + blendY) * 0.5f);
+        return 0.6f * edge + 0.4f * interior;
     }
 
     private static float[,] ExtractSubBlock(float[,] block, int x0, int y0, int bs)
