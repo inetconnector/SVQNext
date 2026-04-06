@@ -1,0 +1,14 @@
+prefix=/c/Users/daniel.NB080/source/repos/SVQNext/external/ffmpeg-build
+exec_prefix=${prefix}
+libdir=/c/Users/daniel.NB080/source/repos/SVQNext/external/ffmpeg-build/lib
+includedir=/c/Users/daniel.NB080/source/repos/SVQNext/external/ffmpeg-build/include
+
+Name: libavcodec
+Description: FFmpeg codec library
+Version: 62.29.101
+Requires: libswresample >= 6.4.100, libavutil >= 60.29.100
+Requires.private: 
+Conflicts:
+Libs: -L${libdir}  -lavcodec mfuuid.lib ole32.lib strmiids.lib ole32.lib user32.lib
+Libs.private: 
+Cflags: -I${includedir}

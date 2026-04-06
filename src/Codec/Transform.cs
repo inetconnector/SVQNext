@@ -56,5 +56,41 @@ public static class Transform
 
         return padded;
     }
+    
+    public static float[,] ExtractBlock(float[,] src, int x0, int y0, int bs)
+    {
+        var block = new float[bs, bs];
+        for (var y = 0; y < bs; y++)
+        for (var x = 0; x < bs; x++)
+            block[y, x] = src[y0 + y, x0 + x];
+        return block;
+    }
 
+    public static void WriteBlock(float[,] dst, int x0, int y0, float[,] block)
+    {
+        var bs = block.GetLength(0);
+        for (var y = 0; y < bs; y++)
+        for (var x = 0; x < bs; x++)
+            dst[y0 + y, x0 + x] = block[y, x];
+    }
+
+    public static float[,] ForwardHadamard(float[,] block)
+    {
+        var bs = block.GetLength(0);
+        var coeffs = (float[,])block.Clone();
+        HadamardBlock(coeffs, bs);
+        return coeffs;
+    }
+
+    public static float[,] InverseHadamard(float[,] coeffs)
+    {
+        var bs = coeffs.GetLength(0);
+        var block = (float[,])coeffs.Clone();
+        HadamardBlock(block, bs);
+        var scale = 1f / (bs * bs);
+        for (var y = 0; y < bs; y++)
+        for (var x = 0; x < bs; x++)
+            block[y, x] *= scale;
+        return block;
+    }
 }

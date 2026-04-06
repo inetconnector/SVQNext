@@ -11,47 +11,69 @@ public static class Motion
         int gh = Hc / bs, gw = Wc / bs;
         var mv = new short[gh, gw, 2];
         var pred = new float[Hc, Wc];
-        Parallel.For(0, gh, by =>
+        for (var by = 0; by < gh; by++)
+        for (var bx = 0; bx < gw; bx++)
         {
-            for (var bx = 0; bx < gw; bx++)
-            {
-                int x0 = bx * bs, y0 = by * bs;
-                var (u, v) = mode == "full"
-                    ? Full(refImg, curImg, x0, y0, bs, search, Q)
-                    : Diamond(refImg, curImg, x0, y0, bs, search, Q);
-                mv[by, bx, 0] = (short)u;
-                mv[by, bx, 1] = (short)v;
-                for (var yy = 0; yy < bs; yy++)
-                for (var xx = 0; xx < bs; xx++)
-                    pred[y0 + yy, x0 + xx] = Sample(refImg, ((x0 + xx) << Q) + u, ((y0 + yy) << Q) + v, Q);
-            }
-        });
+            int x0 = bx * bs, y0 = by * bs;
+            var (startU, startV) = PredictMotionStart(mv, by, bx);
+            var (u, v) = mode == "full"
+                ? Full(refImg, curImg, x0, y0, bs, search, Q, startU, startV)
+                : Diamond(refImg, curImg, x0, y0, bs, search, Q, startU, startV);
+            mv[by, bx, 0] = (short)u;
+            mv[by, bx, 1] = (short)v;
+            for (var yy = 0; yy < bs; yy++)
+            for (var xx = 0; xx < bs; xx++)
+                pred[y0 + yy, x0 + xx] = Sample(refImg, ((x0 + xx) << Q) + u, ((y0 + yy) << Q) + v, Q);
+        }
+
         return (mv, pred);
     }
 
-    private static (int, int) Full(float[,] refImg, float[,] cur, int x0, int y0, int bs, int search, int Q)
+    public static float[,] Compensate(float[,] refImg, short[,,] mv, int bs, int Q)
+    {
+        int Hc = refImg.GetLength(0) / bs * bs, Wc = refImg.GetLength(1) / bs * bs;
+        int gh = Hc / bs, gw = Wc / bs;
+        var pred = new float[Hc, Wc];
+
+        for (var by = 0; by < gh; by++)
+        for (var bx = 0; bx < gw; bx++)
+        {
+            int x0 = bx * bs, y0 = by * bs;
+            var u = mv[by, bx, 0];
+            var v = mv[by, bx, 1];
+            for (var yy = 0; yy < bs; yy++)
+            for (var xx = 0; xx < bs; xx++)
+                pred[y0 + yy, x0 + xx] = Sample(refImg, ((x0 + xx) << Q) + u, ((y0 + yy) << Q) + v, Q);
+        }
+
+        return pred;
+    }
+
+    private static (int, int) Full(float[,] refImg, float[,] cur, int x0, int y0, int bs, int search, int Q, int startU, int startV)
     {
         var best = double.MaxValue;
-        int bu = 0, bv = 0, R = search * (1 << Q);
+        int bu = startU, bv = startV, R = search * (1 << Q);
         for (var dv = -R; dv <= R; dv++)
         for (var du = -R; du <= R; du++)
         {
-            var d = SAD(refImg, cur, x0, y0, bs, du, dv, Q);
+            var candU = startU + du;
+            var candV = startV + dv;
+            var d = SAD(refImg, cur, x0, y0, bs, candU, candV, Q);
             if (d < best)
             {
                 best = d;
-                bu = du;
-                bv = dv;
+                bu = candU;
+                bv = candV;
             }
         }
 
         return (bu, bv);
     }
 
-    private static (int, int) Diamond(float[,] refImg, float[,] cur, int x0, int y0, int bs, int search, int Q)
+    private static (int, int) Diamond(float[,] refImg, float[,] cur, int x0, int y0, int bs, int search, int Q, int startU, int startV)
     {
         int step = 1 << Q, R = search * step;
-        int u = 0, v = 0;
+        int u = Math.Clamp(startU, -R, R), v = Math.Clamp(startV, -R, R);
         var best = SAD(refImg, cur, x0, y0, bs, u, v, Q);
         var improved = true;
         int[][] dirs = new[] { new[] { step, 0 }, new[] { -step, 0 }, new[] { 0, step }, new[] { 0, -step } };
@@ -74,6 +96,37 @@ public static class Motion
         }
 
         return (u, v);
+    }
+
+    private static (int U, int V) PredictMotionStart(short[,,] mv, int by, int bx)
+    {
+        var hasLeft = bx > 0;
+        var hasTop = by > 0;
+        var hasTopLeft = hasLeft && hasTop;
+        if (hasLeft && hasTop && hasTopLeft)
+        {
+            var leftU = mv[by, bx - 1, 0];
+            var topU = mv[by - 1, bx, 0];
+            var topLeftU = mv[by - 1, bx - 1, 0];
+            var leftV = mv[by, bx - 1, 1];
+            var topV = mv[by - 1, bx, 1];
+            var topLeftV = mv[by - 1, bx - 1, 1];
+            return (
+                Median(leftU, topU, leftU + topU - topLeftU),
+                Median(leftV, topV, leftV + topV - topLeftV));
+        }
+
+        if (hasLeft) return (mv[by, bx - 1, 0], mv[by, bx - 1, 1]);
+        if (hasTop) return (mv[by - 1, bx, 0], mv[by - 1, bx, 1]);
+        return (0, 0);
+    }
+
+    private static int Median(int a, int b, int c)
+    {
+        if (a > b) (a, b) = (b, a);
+        if (b > c) (b, c) = (c, b);
+        if (a > b) (a, b) = (b, a);
+        return b;
     }
 
     private static double SAD(float[,] refImg, float[,] cur, int x0, int y0, int bs, int du, int dv, int Q)

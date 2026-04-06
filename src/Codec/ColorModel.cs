@@ -79,17 +79,34 @@ public static class ColorModel
     {
         int H2 = c4.GetLength(0), W2 = c4.GetLength(1);
         var c = new float[H2 * 2, W2 * 2];
-        for (var y = 0; y < H2; y++)
-        for (var x = 0; x < W2; x++)
+        for (var y = 0; y < c.GetLength(0); y++)
+        for (var x = 0; x < c.GetLength(1); x++)
         {
-            var v = c4[y, x];
-            c[2 * y, 2 * x] = v;
-            c[2 * y + 1, 2 * x] = v;
-            c[2 * y, 2 * x + 1] = v;
-            c[2 * y + 1, 2 * x + 1] = v;
+            var srcY = (y + 0.5f) * 0.5f - 0.5f;
+            var srcX = (x + 0.5f) * 0.5f - 0.5f;
+            c[y, x] = SampleBilinear(c4, srcY, srcX);
         }
 
         return c;
+    }
+
+    private static float SampleBilinear(float[,] plane, float y, float x)
+    {
+        var h = plane.GetLength(0);
+        var w = plane.GetLength(1);
+        var y0 = Math.Clamp((int)Math.Floor(y), 0, h - 1);
+        var x0 = Math.Clamp((int)Math.Floor(x), 0, w - 1);
+        var y1 = Math.Clamp(y0 + 1, 0, h - 1);
+        var x1 = Math.Clamp(x0 + 1, 0, w - 1);
+        var fy = y - y0;
+        var fx = x - x0;
+        var v00 = plane[y0, x0];
+        var v10 = plane[y1, x0];
+        var v01 = plane[y0, x1];
+        var v11 = plane[y1, x1];
+        var top = v00 * (1 - fx) + v01 * fx;
+        var bottom = v10 * (1 - fx) + v11 * fx;
+        return top * (1 - fy) + bottom * fy;
     }
 
     // Simple open HDR transfer (no PQ/HLG): piecewise gamma that maps 0..1 -> 0..1 with extended headroom.

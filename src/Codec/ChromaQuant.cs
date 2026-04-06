@@ -5,6 +5,7 @@ namespace SVQNext.Codec;
 public static class ChromaQuant
 {
     public const int CHROMA_Q = 255;
+    private const float ResidualRange = 0.25f;
 
     public static byte[] Q(float[,] c)
     {
@@ -31,6 +32,37 @@ public static class ChromaQuant
         for (var y = 0; y < H2; y++)
         for (var x = 0; x < W2; x++)
             c[y, x] = q[i++] / (float)CHROMA_Q - 0.5f;
+        return c;
+    }
+
+    public static byte[] QResidual(float[,] c)
+    {
+        int h = c.GetLength(0), w = c.GetLength(1);
+        var arr = new byte[h * w];
+        var i = 0;
+        for (var y = 0; y < h; y++)
+        for (var x = 0; x < w; x++)
+        {
+            var clamped = Math.Clamp(c[y, x], -ResidualRange, ResidualRange);
+            var normalized = (clamped + ResidualRange) / (ResidualRange * 2f);
+            var iv = (int)Math.Round(normalized * CHROMA_Q);
+            arr[i++] = (byte)Math.Clamp(iv, 0, CHROMA_Q);
+        }
+
+        return arr;
+    }
+
+    public static float[,] DEQResidual(byte[] q, int h2, int w2)
+    {
+        var c = new float[h2, w2];
+        var i = 0;
+        for (var y = 0; y < h2; y++)
+        for (var x = 0; x < w2; x++)
+        {
+            var normalized = q[i++] / (float)CHROMA_Q;
+            c[y, x] = normalized * (ResidualRange * 2f) - ResidualRange;
+        }
+
         return c;
     }
 }

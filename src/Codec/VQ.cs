@@ -20,7 +20,7 @@ public static class VQ
             for (var y = 0; y < Hc; y++)
             for (var x = 0; x < Wc; x++)
                 res[y, x] = Y[i + 1][y, x] - p[y, x];
-            patches[i] = Extract(res, bs, out _);
+            patches[i] = Normalize(Center(Extract(res, bs, out _), bs), bs);
         });
 
         var all = Concat(patches);
@@ -89,11 +89,8 @@ public static class VQ
         var mu = new float[K];
         for (var k = 0; k < K; k++)
         {
-            double m = 0;
-            for (var j = 0; j < D; j++) m += M[centers[k], j];
-            m /= D;
-            mu[k] = (float)m;
-            for (var j = 0; j < D; j++) code[k, j] = M[centers[k], j] - (float)m;
+            for (var j = 0; j < D; j++) code[k, j] = M[centers[k], j];
+            NormalizeRow(code, k, D);
         }
 
         var assign = new int[N];
@@ -108,7 +105,7 @@ public static class VQ
                     double d2 = 0;
                     for (var j = 0; j < D; j++)
                     {
-                        double diff = M[i, j] - (code[k, j] + mu[k]);
+                        double diff = M[i, j] - code[k, j];
                         d2 += diff * diff;
                     }
 
@@ -148,11 +145,9 @@ public static class VQ
             {
                 var cnt = totalCount[k];
                 if (cnt == 0) continue;
-                double m = 0;
-                for (var j = 0; j < D; j++) m += totals[k, j];
-                m /= D * cnt;
-                mu[k] = (float)m;
-                for (var j = 0; j < D; j++) code[k, j] = (float)(totals[k, j] / cnt - m);
+                mu[k] = 0;
+                for (var j = 0; j < D; j++) code[k, j] = (float)(totals[k, j] / cnt);
+                NormalizeRow(code, k, D);
             }
         }
 
@@ -196,5 +191,63 @@ public static class VQ
         }
 
         return r;
+    }
+
+    private static float[] Center(float[] blocks, int bs)
+    {
+        var centered = new float[blocks.Length];
+        var blockArea = bs * bs;
+        for (var offset = 0; offset < blocks.Length; offset += blockArea)
+        {
+            double sum = 0;
+            for (var i = 0; i < blockArea; i++) sum += blocks[offset + i];
+            var mean = (float)(sum / blockArea);
+            for (var i = 0; i < blockArea; i++) centered[offset + i] = blocks[offset + i] - mean;
+        }
+
+        return centered;
+    }
+
+    private static float[] Normalize(float[] blocks, int bs)
+    {
+        var normalized = new float[blocks.Length];
+        var blockArea = bs * bs;
+        for (var offset = 0; offset < blocks.Length; offset += blockArea)
+        {
+            double energy = 0;
+            for (var i = 0; i < blockArea; i++)
+            {
+                var v = blocks[offset + i];
+                energy += v * v;
+            }
+
+            var norm = Math.Sqrt(energy);
+            if (norm < 1e-9)
+                continue;
+
+            var invNorm = (float)(1.0 / norm);
+            for (var i = 0; i < blockArea; i++)
+                normalized[offset + i] = blocks[offset + i] * invNorm;
+        }
+
+        return normalized;
+    }
+
+    private static void NormalizeRow(float[,] matrix, int row, int width)
+    {
+        double energy = 0;
+        for (var j = 0; j < width; j++)
+        {
+            var v = matrix[row, j];
+            energy += v * v;
+        }
+
+        var norm = Math.Sqrt(energy);
+        if (norm < 1e-9)
+            return;
+
+        var invNorm = (float)(1.0 / norm);
+        for (var j = 0; j < width; j++)
+            matrix[row, j] *= invNorm;
     }
 }
